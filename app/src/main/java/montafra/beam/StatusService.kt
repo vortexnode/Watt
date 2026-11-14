@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.graphics.*
 import android.graphics.drawable.Icon
+import android.os.BatteryManager
 import android.os.Binder
 import android.os.IBinder
 import android.os.PowerManager
@@ -176,11 +177,19 @@ class StatusService : Service() {
                     update()
                 }
                 Intent.ACTION_BATTERY_CHANGED -> {
-                    // Watt is a charging-only monitor. Do not sample battery metrics from
-                    // battery-change broadcasts while unplugged.
-                    if (chargingSessionActive && alarms.any { it.enabled }) {
-                        snapshot = readBatterySnapshot()
-                        checkAlarms()
+                    if (chargingSessionActive) {
+                        // The sticky battery broadcast gives us the unplug edge without a
+                        // sensor read. End immediately and do not sample any metrics afterward.
+                        val stillPlugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+                        if (!stillPlugged) {
+                            pluggedInAt = null
+                            wasPlugged = false
+                            startScreenTimeSession()
+                            endChargingSession()
+                        } else if (alarms.any { it.enabled }) {
+                            snapshot = readBatterySnapshot()
+                            checkAlarms()
+                        }
                     }
                 }
                 Intent.ACTION_POWER_CONNECTED -> {
