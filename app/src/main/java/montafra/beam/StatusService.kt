@@ -244,7 +244,8 @@ class StatusService : Service() {
         }
         val parts = metrics?.split('|')
         val sysfsCurrent = parts?.getOrNull(0)?.toLongOrNull()
-        val sysfsVoltage = parts?.getOrNull(1)?.toLongOrNull()
+        // Linux power_supply voltage_now is in microvolts; BatterySnapshot expects millivolts.
+        val sysfsVoltage = parts?.getOrNull(1)?.toLongOrNull()?.div(1_000L)
         val sysfsIsUseful = sysfsCurrent != null && sysfsVoltage != null &&
             sysfsVoltage > 0L && (sysfsCurrent != 0L || apiSnapshot.currentRaw == null || apiSnapshot.currentRaw == 0L)
         if (sysfsIsUseful) return battery.snapshot(sysfsCurrent, sysfsVoltage)
