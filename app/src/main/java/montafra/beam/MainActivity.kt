@@ -40,6 +40,7 @@ import montafra.beam.ui.WorkaroundsSettingsScreen
 import montafra.beam.ui.rememberBeamNavController
 import montafra.beam.ui.theme.BeamTheme
 import montafra.beam.ui.theme.rememberThemePrefs
+import rikka.shizuku.Shizuku
 
 const val namespace = "montafra.beam"
 const val batteryDataReq = "$namespace.battery-data-req"
@@ -61,6 +62,8 @@ const val alarmTempDefaultThreshold = 40
 const val alarmRepeatDefaultMin = 15
 const val settingsName = "settings"
 const val settingsUpdateInd = "$namespace.settings-update-ind"
+const val shizukuPermissionGranted = "$namespace.shizuku-permission-granted"
+const val shizukuPermissionRequestCode = 7101
 
 val LocalHapticsEnabled = staticCompositionLocalOf { true }
 
@@ -72,6 +75,26 @@ class MainActivity : ComponentActivity() {
         override fun onServiceDisconnected(name: ComponentName?) {}
     }
     private var bound = false
+
+    private val shizukuBinderReceivedListener = Shizuku.OnBinderReceivedListener {
+        try {
+            if (!Shizuku.isPreV11()) {
+                if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                    sendBroadcast(Intent(shizukuPermissionGranted).setPackage(packageName))
+                } else if (!Shizuku.shouldShowRequestPermissionRationale()) {
+                    Shizuku.requestPermission(shizukuPermissionRequestCode)
+                }
+            }
+        } catch (_: Throwable) {
+            // Shizuku is optional; BatteryManager continues to work without it.
+        }
+    }
+
+    private val shizukuPermissionResultListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+        if (requestCode == shizukuPermissionRequestCode && grantResult == PackageManager.PERMISSION_GRANTED) {
+            sendBroadcast(Intent(shizukuPermissionGranted).setPackage(packageName))
+        }
+    }
 
     private fun getPerm(name: String): Perm {
         val settings = getSharedPreferences(settingsName, MODE_PRIVATE)
@@ -116,6 +139,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
+        Shizuku.removeRequestPermissionResultListener(shizukuPermissionResultListener)
         if (bound) {
             unbindService(serviceConnection)
             bound = false
@@ -131,6 +156,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Shizuku.addBinderReceivedListenerSticky(shizukuBinderReceivedListener)
+        Shizuku.addRequestPermissionResultListener(shizukuPermissionResultListener)
         // The default SystemBarStyle.auto() writes a scrim into navigationBarColor on API 28 and
         // turns isNavigationBarContrastEnforced back on from API 29, overriding what
         // values-v29/themes.xml asks for. A non-auto style keeps both off, so the nav bar stays
