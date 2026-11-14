@@ -155,9 +155,10 @@ class StatusService : Service() {
                     update()
                 }
                 Intent.ACTION_SCREEN_OFF -> {
+                    // Charging power is a Live Update and must keep refreshing with the display off.
+                    // Screen-time bookkeeping is still closed, but the battery poller stays alive.
                     closeScreenOnPeriod()
                     persistScreenTime()
-                    task.stop()
                 }
                 Intent.ACTION_SCREEN_ON -> {
                     // start() ticks synchronously, and update() -> reconcileScreenTime() opens the
@@ -562,49 +563,28 @@ class StatusService : Service() {
     }
 
     private fun buildNotification(): Notification {
-        val iconValue = metricValue(notificationIndicator)
-        val iconUnit  = metricUnit(notificationIndicator)
-        val timeText = if (!showTimeToFull) "" else when (val seconds = snapshot.secondsUntilCharged) {
-            null -> ""
-            0.0  -> getString(R.string.fullyCharged)
-            else -> getString(R.string.untilFullCharge, fmtSeconds(seconds))
-        }
+        // Plug state, rather than BATTERY_STATUS_CHARGING, also covers Samsung's charge pauses
+        // and adaptive charging. At 100% the Live Update can remain present at 0.0 W while cabled.
+        val plugged = snapshot.plugged ?: snapshot.charging
+        val powerText = snapshot.watts?.let { fmt(abs(it)) } ?: "—"
+        val title = if (plugged) "$powerText W" else getString(R.string.app_name)
+        val detail = if (plugged) "Charging" else "Waiting for charger"
 
-        val builder = Notification.Builder(this, noteChannelId)
-            .setContentTitle("$iconValue $iconUnit")
-            .setSmallIcon(renderIcon(iconValue, iconUnit))
+        return Notification.Builder(this, noteChannelId)
+            .setContentTitle(title)
+            .setContentText(detail)
+            .setStyle(Notification.BigTextStyle().bigText(detail))
+            .setSmallIcon(R.drawable.ico_lightning)
             .setContentIntent(noteIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-
-        val entries = indicatorEntries.filter { it != notificationIndicator }.sortedBy { metricOrder.indexOf(it) }
-        val screenTimeText = if (showScreenTimeInNotification) screenTimeFormatted() else null
-
-        if (entries.isNotEmpty() || screenTimeText != null) {
-            val style = Notification.InboxStyle()
-            entries.forEach { key ->
-                style.addLine("${metricLabel(key)}  ${metricValue(key)}${metricUnit(key)}")
-            }
-            if (screenTimeText != null) {
-                style.addLine("${getString(R.string.screenTime)}  $screenTimeText")
-            }
-            if (timeText.isNotEmpty()) style.setSummaryText(timeText)
-            val compactParts = mutableListOf<String>()
-            entries.forEach { k -> compactParts.add("${metricValue(k)}${metricUnit(k)}") }
-            if (screenTimeText != null) compactParts.add(screenTimeText)
-            builder.setStyle(style).setContentText(compactParts.joinToString("  "))
-        } else {
-            builder.setStyle(null).setContentText(timeText)
-        }
-
-        return try {
-            builder.build()
-        } catch (e: RuntimeException) {
-            // Some ROMs still reject the rendered bitmap icon while copying/scaling it;
-            // fall back to a static icon rather than kill the service.
-            Log.w(this::class.java.name, "Rendered notification icon rejected", e)
-            builder.setSmallIcon(R.drawable.ico_lightning).build()
-        }
+            .setSilent(true)
+            // Android 16 Live Updates promotion request. Use the documented extra directly so
+            // this remains buildable with compileSdk 36 even where the typed API is 36.1+.
+            .addExtras(android.os.Bundle().apply {
+                putBoolean("android.requestPromotedOngoing", plugged)
+            })
+            .build()
     }
 
     private fun screenTimeFormatted(): String {
