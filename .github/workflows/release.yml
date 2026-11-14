@@ -40,13 +40,34 @@ jobs:
           unzip -q "$SIGN_DIR/signing.zip" -d "$SIGN_DIR"
           CREDENTIALS="$SIGN_DIR/bgdata-signing/CREDENTIALS.txt"
           test -f "$CREDENTIALS" || { echo "::error::CREDENTIALS.txt not found in signing bundle"; exit 1; }
+
+          KEYSTORE_PATH=""
+          KEY_ALIAS=""
+          KEYSTORE_PASSWORD=""
+          KEY_PASSWORD=""
+          KEYSTORE_FILE=""
           while IFS='=' read -r key value; do
             case "$key" in
-              KEYSTORE_FILE) echo "KEYSTORE_PATH=$SIGN_DIR/bgdata-signing/$value" >> "$GITHUB_ENV" ;;
-              KEY_ALIAS|KEYSTORE_PASSWORD|KEY_PASSWORD) echo "$key=$value" >> "$GITHUB_ENV" ;;
+              KEYSTORE_FILE) KEYSTORE_FILE="$value" ;;
+              KEY_ALIAS) KEY_ALIAS="$value" ;;
+              KEYSTORE_PASSWORD) KEYSTORE_PASSWORD="$value" ;;
+              KEY_PASSWORD) KEY_PASSWORD="$value" ;;
             esac
           done < "$CREDENTIALS"
+
+          test -n "$KEYSTORE_FILE" || { echo "::error::KEYSTORE_FILE is missing from CREDENTIALS.txt"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "::error::KEY_ALIAS is missing from CREDENTIALS.txt"; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "::error::KEYSTORE_PASSWORD is missing from CREDENTIALS.txt"; exit 1; }
+          KEY_PASSWORD="${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+          KEYSTORE_PATH="$SIGN_DIR/bgdata-signing/$KEYSTORE_FILE"
           test -s "$KEYSTORE_PATH" || { echo "::error::Keystore file missing or empty"; exit 1; }
+
+          {
+            echo "KEYSTORE_PATH=$KEYSTORE_PATH"
+            echo "KEY_ALIAS=$KEY_ALIAS"
+            echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
 
       - name: Build signed release APK
         run: ./gradlew --no-daemon :app:assembleRelease
