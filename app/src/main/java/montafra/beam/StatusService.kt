@@ -125,6 +125,7 @@ class StatusService : Service() {
     private var shizukuServiceBound = false
     private var powerDebug = "Waiting for battery data"
     private var shizukuBindState = "not attempted"
+    private var isForeground = false
 
     private val shizukuArgs by lazy {
         Shizuku.UserServiceArgs(
@@ -573,15 +574,6 @@ class StatusService : Service() {
                 description = "Live charging power shown while a charger is connected"
             }
         )
-        noteMgr.createNotificationChannel(
-            NotificationChannel(
-                monitorChannelId,
-                "Charging Power Monitor",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Keeps charging-state monitoring active in the background"
-            }
-        )
         createAlarmChannel()
 
         noteIntent = PendingIntent.getActivity(
@@ -631,25 +623,29 @@ class StatusService : Service() {
         init()
         loadSettings()
         restoreServiceState()
-        task.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         debug("onStartCommand()")
-
         super.onStartCommand(intent, flags, startId)
-
         loadSettings()
-
-        if (notificationEnabled) {
-            try {
-                startForeground(noteId, buildMonitorNotification())
-            } catch (e: Exception) {
-                Log.e(this::class.java.name, "Failed to foreground StatusService", e)
-            }
+        snapshot = readBatterySnapshot()
+        val plugged = snapshot.plugged ?: snapshot.charging
+        if (!notificationEnabled || !plugged) {
+            stopSelf(startId)
+            return START_NOT_STICKY
         }
-
-        return START_STICKY
+        try {
+            // The Live Update itself is the foreground-service notification. There is no
+            // separate permanent "monitoring" notification.
+            startForeground(liveNoteId, buildNotification())
+            isForeground = true
+            task.start()
+        } catch (e: Exception) {
+            Log.e(this::class.java.name, "Failed to foreground charging session", e)
+            stopSelf(startId)
+        }
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
@@ -710,16 +706,6 @@ class StatusService : Service() {
             lock.release()
         }
     }
-
-    private fun buildMonitorNotification(): Notification =
-        Notification.Builder(this, monitorChannelId)
-            .setContentTitle(getString(R.string.app_name))
-            .setContentText("Monitoring for a connected charger")
-            .setSmallIcon(R.drawable.ico_lightning)
-            .setContentIntent(noteIntent)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .build()
 
     private fun buildNotification(): Notification {
         val powerText = snapshot.watts?.let { fmt(abs(it)) } ?: "—"
@@ -816,9 +802,31 @@ class StatusService : Service() {
         val plugged = snapshot.plugged ?: snapshot.charging
         syncChargingWakeLock(plugged)
         if (notificationEnabled && plugged) {
-            noteMgr.notify(liveNoteId, buildNotification())
+            val live = buildNotification()
+            if (!isForeground) {
+                try {
+                    startForeground(liveNoteId, live)
+                    isForeground = true
+                } catch (e: Exception) {
+                    Log.e(this::class.java.name, "Could not start charging foreground session", e)
+                    stopSelf()
+                    return
+                }
+            } else {
+                noteMgr.notify(liveNoteId, live)
+            }
         } else {
             noteMgr.cancel(liveNoteId)
+            if (isForeground) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                isForeground = false
+            }
+            if (!plugged) {
+                task.stop()
+                syncChargingWakeLock(false)
+                stopSelf()
+                return
+            }
         }
         checkAlarms()
         updateData()
