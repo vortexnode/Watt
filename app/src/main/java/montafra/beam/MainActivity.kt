@@ -47,7 +47,6 @@ const val batteryDataReq = "$namespace.battery-data-req"
 const val batteryDataResp = "$namespace.battery-data-resp"
 const val intervalMs = 1_000L
 const val noteChannelId = "$namespace.live.v1"
-const val monitorChannelId = "$namespace.monitor.v1"
 const val noteId = 1
 const val liveNoteId = 5
 const val alarmChannelId = "$namespace.alarms.v1"
