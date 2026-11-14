@@ -108,10 +108,10 @@
     <string name="batteryUsage">系统电池使用情况</string>
     <string name="batteryUsageDesc">打开 Android 电池使用详情界面</string>
     <string name="vendorBatteryTitle">后台限制</string>
-    <string name="vendorBatteryDesc">允许 Beam 自启动并忽略电池优化，以保持持续运行</string>
+    <string name="vendorBatteryDesc">允许 Watt 自启动并忽略电池优化，以保持持续运行</string>
     <string name="vendorBatteryRestricted">后台使用当前受限制 — 通知可能停止更新</string>
-    <string name="vendorHintTitle">保持 Beam 运行</string>
-    <string name="vendorHintBody">%1$s 会激进地停止后台应用。为使电池通知保持活跃，请在系统设置中为 Beam 启用自启动并移除电池限制。</string>
+    <string name="vendorHintTitle">保持 Watt 运行</string>
+    <string name="vendorHintBody">%1$s 会激进地停止后台应用。为使电池通知保持活跃，请在系统设置中为 Watt 启用自启动并移除电池限制。</string>
     <string name="vendorHintOpenSettings">打开设置</string>
     <string name="learnMore">了解更多</string>
     <string name="systemNotificationSettings">系统通知设置</string>
@@ -144,4 +144,7 @@
     <string name="alarmHighText">充电已达 %1$d%%</string>
     <string name="alarmTempText">温度已达 %1$d°C</string>
     <string name="alarmTempTextF">温度已达 %1$d°F</string>
+    <string name="chargingPowerTitle">CHARGING POWER</string>
+    <string name="connectCharger">Connect charger</string>
+    <string name="readingPower">Reading charging data…</string>
 </resources>

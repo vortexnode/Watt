@@ -111,10 +111,10 @@
     <string name="batteryUsage">Utilisation de la batterie du système</string>
     <string name="batteryUsageDesc">Ouvrir l\'écran d\'utilisation de la batterie d\'Android</string>
     <string name="vendorBatteryTitle">Restrictions en arrière-plan</string>
-    <string name="vendorBatteryDesc">Autorise Beam à démarrer automatiquement et exempte-le des restrictions de batterie pour que la notification reste active</string>
+    <string name="vendorBatteryDesc">Autorise Watt à démarrer automatiquement et exempte-le des restrictions de batterie pour que la notification reste active</string>
     <string name="vendorBatteryRestricted">L\'utilisation en arrière-plan est actuellement restreinte — la notification peut cesser de se mettre à jour</string>
-    <string name="vendorHintTitle">Garder Beam actif</string>
-    <string name="vendorHintBody">%1$s arrête agressivement les applications en arrière-plan. Pour garder la notification de batterie active, active le démarrage automatique et supprime les restrictions de batterie pour Beam dans les paramètres système.</string>
+    <string name="vendorHintTitle">Garder Watt actif</string>
+    <string name="vendorHintBody">%1$s arrête agressivement les applications en arrière-plan. Pour garder la notification de batterie active, active le démarrage automatique et supprime les restrictions de batterie pour Watt dans les paramètres système.</string>
     <string name="vendorHintOpenSettings">Ouvrir les paramètres</string>
     <string name="learnMore">En savoir plus</string>
     <string name="systemNotificationSettings">Paramètres de notification du système</string>
@@ -144,4 +144,7 @@
     <string name="alarmHighText">La charge a atteint %1$d%%</string>
     <string name="alarmTempText">La température a atteint %1$d°C</string>
     <string name="alarmTempTextF">La température a atteint %1$d°F</string>
+    <string name="chargingPowerTitle">CHARGING POWER</string>
+    <string name="connectCharger">Connect charger</string>
+    <string name="readingPower">Reading charging data…</string>
 </resources>

@@ -109,10 +109,10 @@
     <string name="batteryUsage">Penggunaan Baterai Sistem</string>
     <string name="batteryUsageDesc">Buka layar penggunaan baterai Android</string>
     <string name="vendorBatteryTitle">Batasan latar belakang</string>
-    <string name="vendorBatteryDesc">Izinkan Beam untuk memulai otomatis dan kecualikan dari batasan baterai agar notifikasi tetap berjalan</string>
+    <string name="vendorBatteryDesc">Izinkan Watt untuk memulai otomatis dan kecualikan dari batasan baterai agar notifikasi tetap berjalan</string>
     <string name="vendorBatteryRestricted">Penggunaan latar belakang saat ini dibatasi — notifikasi mungkin berhenti diperbarui</string>
-    <string name="vendorHintTitle">Jaga Beam tetap berjalan</string>
-    <string name="vendorHintBody">%1$s menghentikan aplikasi latar belakang secara agresif. Untuk menjaga notifikasi baterai tetap aktif, aktifkan mulai otomatis dan hapus batasan baterai untuk Beam di pengaturan sistem.</string>
+    <string name="vendorHintTitle">Jaga Watt tetap berjalan</string>
+    <string name="vendorHintBody">%1$s menghentikan aplikasi latar belakang secara agresif. Untuk menjaga notifikasi baterai tetap aktif, aktifkan mulai otomatis dan hapus batasan baterai untuk Watt di pengaturan sistem.</string>
     <string name="vendorHintOpenSettings">Buka pengaturan</string>
     <string name="learnMore">Pelajari lebih lanjut</string>
     <string name="systemNotificationSettings">Pengaturan Notifikasi Sistem</string>
@@ -145,4 +145,7 @@
     <string name="alarmHighText">Pengisian daya mencapai %1$d%%</string>
     <string name="alarmTempText">Suhu mencapai %1$d°C</string>
     <string name="alarmTempTextF">Suhu mencapai %1$d°F</string>
+    <string name="chargingPowerTitle">CHARGING POWER</string>
+    <string name="connectCharger">Connect charger</string>
+    <string name="readingPower">Reading charging data…</string>
 </resources>      

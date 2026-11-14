@@ -107,10 +107,10 @@
     <string name="batteryUsage">Systemowe użycie baterii</string>
     <string name="batteryUsageDesc">Otwórz systemowy ekran użycia baterii</string>
     <string name="vendorBatteryTitle">Ograniczenia w tle</string>
-    <string name="vendorBatteryDesc">Zezwól aplikacji Beam na automatyczne uruchamianie i wyłącz ograniczenia baterii, aby powiadomienie pozostało aktywne</string>
+    <string name="vendorBatteryDesc">Zezwól aplikacji Watt na automatyczne uruchamianie i wyłącz ograniczenia baterii, aby powiadomienie pozostało aktywne</string>
     <string name="vendorBatteryRestricted">Działanie w tle jest obecnie ograniczone — powiadomienie może przestać się aktualizować</string>
-    <string name="vendorHintTitle">Utrzymaj działanie Beam</string>
-    <string name="vendorHintBody">%1$s agresywnie zatrzymuje aplikacje w tle. Aby powiadomienie o baterii pozostało aktywne, włącz autostart i usuń ograniczenia baterii dla Beam w ustawieniach systemu.</string>
+    <string name="vendorHintTitle">Utrzymaj działanie Watt</string>
+    <string name="vendorHintBody">%1$s agresywnie zatrzymuje aplikacje w tle. Aby powiadomienie o baterii pozostało aktywne, włącz autostart i usuń ograniczenia baterii dla Watt w ustawieniach systemu.</string>
     <string name="vendorHintOpenSettings">Otwórz ustawienia</string>
     <string name="learnMore">Dowiedz się więcej</string>
     <string name="systemNotificationSettings">Systemowe ustawienia powiadomień</string>
@@ -143,4 +143,7 @@
     <string name="alarmHighText">Naładowanie osiągnęło %1$d%%</string>
     <string name="alarmTempText">Temperatura osiągnęła %1$d°C</string>
     <string name="alarmTempTextF">Temperatura osiągnęła %1$d°F</string>
+    <string name="chargingPowerTitle">CHARGING POWER</string>
+    <string name="connectCharger">Connect charger</string>
+    <string name="readingPower">Reading charging data…</string>
 </resources>
