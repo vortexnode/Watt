@@ -68,7 +68,7 @@
     <string name="languageSystemDefault">Как в системе</string>
     <string name="changelog">Список изменений</string>
     <string name="issueTracker">Сообщить об ошибке</string>
-    <string name="appDescription">Показатели батареи в строке состояния в реальном времени</string>
+    <string name="appDescription">Мощность зарядки в строке состояния в реальном времени</string>
     <string name="interfaceSection">Интерфейс</string>
     <string name="theme">Тема</string>
     <string name="notification">Уведомление</string>
@@ -143,7 +143,7 @@
     <string name="alarmHighText">Заряд достиг %1$d%%</string>
     <string name="alarmTempText">Температура достигла %1$d°C</string>
     <string name="alarmTempTextF">Температура достигла %1$d°F</string>
-    <string name="chargingPowerTitle">CHARGING POWER</string>
-    <string name="connectCharger">Connect charger</string>
-    <string name="readingPower">Reading charging data…</string>
+    <string name="chargingPowerTitle">МОЩНОСТЬ ЗАРЯДКИ</string>
+    <string name="connectCharger">Подключите зарядное устройство</string>
+    <string name="readingPower">Получение данных о зарядке…</string>
 </resources>
