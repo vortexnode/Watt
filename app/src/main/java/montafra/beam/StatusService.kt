@@ -636,7 +636,7 @@ class StatusService : Service() {
             .putExtra("energy",
                 "${fmt(snapshot.energyWattHours)}Wh (${fmt(snapshot.energyAmpHours)}Ah)"
             )
-            .putExtra("power", fmt(snapshot.watts) + "W")
+            .putExtra("power", fmt(snapshot.watts?.let { abs(it) }) + "W")
             .putExtra("temperature", fmt(displayTemp(snapshot.celsius)) + tempUnit())
             .putExtra("timeToFullCharge",
                 when (val seconds = snapshot.secondsUntilCharged) {
