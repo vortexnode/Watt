@@ -189,6 +189,9 @@ class MainActivity : ComponentActivity() {
         } else {
             syncNotificationEnabled()
             startStatusService()
+            if (checkSelfPermission(permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                registerShizukuListeners()
+            }
         }
 
         setContent {
