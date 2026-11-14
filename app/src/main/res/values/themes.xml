@@ -1,44 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="background">#ffffff</color>
     <color name="foreground">#212121</color>
     <color name="foreground_strong">#000000</color>
-    <!--
-        Platform alias: values-night overrides only this empty style (and the color resources
-        above), so every shared window item lives exactly once, on Base below. Styles resolve
-        their parent at runtime, so Base picks up the dark parent in dark mode, and the
-        values-v29 overlay still only has to add the contrast flag on top of Theme.Watt.
-    -->
     <style name="Platform.Theme.Watt" parent="Theme.Material3.Light.NoActionBar" />
     <style name="Base.Theme.Watt" parent="Platform.Theme.Watt">
         <item name="colorPrimary">@color/primary</item>
         <item name="colorOnPrimary">@color/text_on_primary</item>
         <item name="android:statusBarColor">?attr/colorPrimary</item>
-        <!--
-            Declared here rather than only in code so it also covers windows enableEdgeToEdge() never
-            touches - notably the ModalBottomSheet dialog window, which would otherwise fall back to
-            the Material3 default of ?android:attr/colorBackground and tint the nav bar area whenever
-            a sheet opens.
-        -->
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <!--
-            Landscape puts the cutout on a long edge, where the default mode letterboxes the whole
-            window away from it. shortEdges keeps the app edge-to-edge; the scaffolds ask for
-            safeDrawing insets so no content actually lands under the notch.
-        -->
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <item name="android:textSize">@dimen/text_size</item>
         <item name="android:textColor">@color/foreground</item>
         <item name="android:windowBackground">@color/background</item>
     </style>
     <style name="Theme.Watt" parent="Base.Theme.Watt" />
-    <style name="ThemeOverlay.Watt.Oled" parent="">
-        <item name="android:windowBackground">@color/oled_black</item>
-        <item name="colorSurface">@color/oled_black</item>
-        <item name="colorSurfaceVariant">#0d0d0d</item>
-        <item name="colorSurfaceContainerLowest">@color/oled_black</item>
-        <item name="colorSurfaceContainerLow">#050505</item>
-        <item name="colorSurfaceContainer">#090909</item>
-        <item name="colorSurfaceContainerHigh">#0e0e0e</item>
-        <item name="colorSurfaceContainerHighest">#131313</item>
-    </style>
 </resources>

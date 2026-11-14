@@ -4,10 +4,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:name=".BeamApplication"
@@ -31,12 +30,14 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+
         <activity
             android:name=".RoutineActionActivity"
             android:exported="true"
             android:theme="@android:style/Theme.NoDisplay"
             android:excludeFromRecents="true"
             android:taskAffinity="" />
+
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
@@ -46,10 +47,12 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
         <service
             android:name=".ChargingMonitorJobService"
             android:permission="android.permission.BIND_JOB_SERVICE"
             android:exported="true" />
+
         <service
             android:name=".StatusService"
             android:process=":batteryStatus"
@@ -58,30 +61,7 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Monitor the battery while charging and publish the user's live charging-power notification." />
         </service>
-        <service
-            android:name=".BeamNotificationTileService"
-            android:icon="@drawable/ico_tile"
-            android:label="@string/app_name"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.service.quicksettings.action.QS_TILE" />
-            </intent-filter>
-        </service>
-        <receiver
-            android:name=".BeamTempWidgetProvider"
-            android:label="@string/widgetTempLabel"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="montafra.beam.battery-data-resp" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_temp_info" />
-        </receiver>
+
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
@@ -90,5 +70,4 @@
             android:multiprocess="false"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
     </application>
-
 </manifest>
