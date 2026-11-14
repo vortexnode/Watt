@@ -643,6 +643,26 @@ class StatusService : Service() {
             return START_NOT_STICKY
         }
         chargingSessionActive = true
+
+        // Promote immediately. Shizuku is an optional measurement fallback and must never
+        // prevent the core Live Notification from appearing when its binder is slow,
+        // unavailable, or throws during process initialization.
+        try {
+            startForeground(liveNoteId, buildNotification())
+            isForeground = true
+        } catch (e: Exception) {
+            Log.e(this::class.java.name, "Could not publish charging foreground notification", e)
+            chargingSessionActive = false
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+
+        // Start BatteryManager polling independently of Shizuku.
+        // task.start() performs the first update immediately.
+        task.start()
+
+        // Shizuku is strictly best-effort. Failure here leaves the notification and
+        // BatteryManager measurements running normally.
         try {
             ShizukuProvider.enableMultiProcessSupport(false)
             ShizukuProvider.requestBinderForNonProviderProcess(this)
@@ -652,15 +672,9 @@ class StatusService : Service() {
                 shizukuListenersRegistered = true
             }
             bindShizukuReader()
-            snapshot = readBatterySnapshot()
-            // The Live Update itself is the foreground-service notification. There is no
-            // separate permanent "monitoring" notification.
-            startForeground(liveNoteId, buildNotification())
-            isForeground = true
-            task.start()
-        } catch (e: Exception) {
-            Log.e(this::class.java.name, "Failed to foreground charging session", e)
-            stopSelf(startId)
+        } catch (e: Throwable) {
+            shizukuBindState = "optional Shizuku init failed: ${e.javaClass.simpleName}"
+            Log.w(this::class.java.name, "Shizuku unavailable; keeping BatteryManager Live Update active", e)
         }
         return START_NOT_STICKY
     }
