@@ -514,6 +514,7 @@ class StatusService : Service() {
         battery = Battery(applicationContext)
         try {
             ShizukuProvider.enableMultiProcessSupport(false)
+            ShizukuProvider.requestBinderForNonProviderProcess(this)
             Shizuku.addBinderReceivedListenerSticky(shizukuBinderReceivedListener)
             Shizuku.addBinderDeadListener(shizukuBinderDeadListener)
             bindShizukuReader()
