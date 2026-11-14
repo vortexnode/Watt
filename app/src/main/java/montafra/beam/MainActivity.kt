@@ -4,11 +4,13 @@ import android.Manifest.permission
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
+import android.os.BatteryManager
 import android.os.Bundle
 import android.os.IBinder
 import androidx.activity.ComponentActivity
@@ -117,8 +119,11 @@ class MainActivity : ComponentActivity() {
         if (!getSharedPreferences(settingsName, MODE_PRIVATE).getBoolean("notificationEnabled", true)) return
         // Start only when the user opens the app during an active charging session.
         // Later plug-ins are handled by ChargingPowerReceiver.
-        val batteryState = Battery(this).snapshot()
-        if (batteryState.plugged ?: batteryState.charging) {
+        // Read only the sticky plug-state broadcast. Do not sample current/voltage when
+        // the user merely opens Watt while the phone is unplugged.
+        val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val plugged = (batteryIntent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+        if (plugged) {
             startForegroundService(Intent(this, StatusService::class.java))
         }
     }
