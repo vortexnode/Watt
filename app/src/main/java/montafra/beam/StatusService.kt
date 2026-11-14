@@ -2,10 +2,13 @@ package montafra.beam
 
 import android.app.*
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.content.ServiceConnection
+import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.graphics.*
 import android.graphics.drawable.Icon
@@ -18,6 +21,9 @@ import java.time.LocalDateTime
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import androidx.core.content.edit
+import com.vortexnode.chargingpower.IPowerSupplyReader
+import rikka.shizuku.Shizuku
+import rikka.shizuku.ShizukuProvider
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
@@ -115,6 +121,35 @@ class StatusService : Service() {
     private lateinit var noteIntent: PendingIntent
     private lateinit var noteMgr: NotificationManager
     private var chargingWakeLock: PowerManager.WakeLock? = null
+    private var powerSupplyReader: IPowerSupplyReader? = null
+    private var shizukuServiceBound = false
+
+    private val shizukuArgs by lazy {
+        Shizuku.UserServiceArgs(
+            ComponentName(packageName, PowerSupplyUserService::class.java.name)
+        ).daemon(true).tag("charging-power-reader").version(1)
+    }
+
+    private val shizukuConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            powerSupplyReader = service?.let { IPowerSupplyReader.Stub.asInterface(it) }
+            shizukuServiceBound = powerSupplyReader != null
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            powerSupplyReader = null
+            shizukuServiceBound = false
+        }
+    }
+
+    private val shizukuBinderReceivedListener = Shizuku.OnBinderReceivedListener {
+        bindShizukuReader()
+    }
+
+    private val shizukuBinderDeadListener = Shizuku.OnBinderDeadListener {
+        powerSupplyReader = null
+        shizukuServiceBound = false
+    }
     private var pluggedInAt: ZonedDateTime? = null
     private lateinit var snapshot: BatterySnapshot
     private val task = PeriodicTask({ update() }, { pollIntervalMs })
@@ -128,6 +163,7 @@ class StatusService : Service() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 batteryDataReq -> updateData()
+                shizukuPermissionGranted -> bindShizukuReader()
                 settingsUpdateInd -> {
                     loadSettings()
                     update()
@@ -138,7 +174,7 @@ class StatusService : Service() {
                     // thresholds here; the status notification is left untouched. Skipped
                     // entirely when no alarm is enabled, so non-users don't wake on every change.
                     if (alarms.any { it.enabled }) {
-                        snapshot = battery.snapshot()
+                        snapshot = readBatterySnapshot()
                         checkAlarms()
                     }
                 }
@@ -184,6 +220,34 @@ class StatusService : Service() {
                 }
             }
         }
+    }
+
+    private fun bindShizukuReader() {
+        try {
+            if (Shizuku.isPreV11() || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) return
+            if (shizukuServiceBound) return
+            shizukuServiceBound = true
+            Shizuku.bindUserService(shizukuArgs, shizukuConnection)
+        } catch (e: Throwable) {
+            shizukuServiceBound = false
+            Log.w(this::class.java.name, "Shizuku power reader unavailable; using BatteryManager", e)
+        }
+    }
+
+    private fun readBatterySnapshot(): BatterySnapshot {
+        val metrics = try {
+            powerSupplyReader?.readBatteryMetrics()
+        } catch (e: Throwable) {
+            Log.w(this::class.java.name, "Shizuku battery read failed; using BatteryManager", e)
+            null
+        }
+        val parts = metrics?.split('|')
+        val sysfsCurrent = parts?.getOrNull(0)?.toLongOrNull()
+        val sysfsVoltage = parts?.getOrNull(1)?.toLongOrNull()
+        if (sysfsCurrent != null && sysfsVoltage != null && sysfsVoltage > 0L) {
+            return battery.snapshot(sysfsCurrent, sysfsVoltage)
+        }
+        return battery.snapshot()
     }
 
     private fun loadSettings() {
@@ -447,7 +511,15 @@ class StatusService : Service() {
         initialized = true
 
         battery = Battery(applicationContext)
-        snapshot = battery.snapshot()
+        try {
+            ShizukuProvider.enableMultiProcessSupport(false)
+            Shizuku.addBinderReceivedListenerSticky(shizukuBinderReceivedListener)
+            Shizuku.addBinderDeadListener(shizukuBinderDeadListener)
+            bindShizukuReader()
+        } catch (_: Throwable) {
+            // Shizuku is optional; BatteryManager remains the fallback.
+        }
+        snapshot = readBatterySnapshot()
         // Before the channels, so the alarm channel is named in the picked language from the start.
         applyAppLanguage(getSharedPreferences(settingsName, MODE_MULTI_PROCESS))
 
@@ -486,6 +558,7 @@ class StatusService : Service() {
             msgReceiver,
             IntentFilter().apply {
                 addAction(batteryDataReq)
+                addAction(shizukuPermissionGranted)
                 addAction(settingsUpdateInd)
                 addAction(Intent.ACTION_BATTERY_CHANGED)
                 addAction(Intent.ACTION_POWER_CONNECTED)
@@ -544,6 +617,12 @@ class StatusService : Service() {
         task.stop()
         chargingWakeLock?.let { if (it.isHeld) it.release() }
         if (initialized) unregisterReceiver(msgReceiver)
+        try {
+            Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
+            Shizuku.removeBinderDeadListener(shizukuBinderDeadListener)
+            if (shizukuServiceBound) Shizuku.unbindUserService(shizukuArgs, shizukuConnection, true)
+        } catch (_: Throwable) {
+        }
         super.onDestroy()
     }
 
