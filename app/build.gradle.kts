@@ -25,11 +25,11 @@ configure<ApplicationExtension> {
     }
 
     defaultConfig {
-        applicationId = "montafra.beam"
+        applicationId = "com.vortexnode.chargingpower"
         minSdk = 28 // BatteryManager.computeChargeTimeRemaining()
         targetSdk = 36
-        versionCode = 39
-        versionName = "2.3"
+        versionCode = 40
+        versionName = "1.0.0"
     }
 
     androidResources {
