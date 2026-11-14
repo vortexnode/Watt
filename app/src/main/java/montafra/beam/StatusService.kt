@@ -129,7 +129,7 @@ class StatusService : Service() {
     private val shizukuArgs by lazy {
         Shizuku.UserServiceArgs(
             ComponentName(packageName, PowerSupplyUserService::class.java.name)
-        ).daemon(true).tag("charging-power-reader").version(1)
+        ).daemon(true).tag("charging-power-reader").processNameSuffix("power-reader").version(2)
     }
 
     private val shizukuConnection = object : ServiceConnection {
@@ -288,8 +288,8 @@ class StatusService : Service() {
         if (applyAppLanguage(settings)) createAlarmChannel()
         notificationEnabled = settings.getBoolean("notificationEnabled", true)
         if (!notificationEnabled) stopForeground(STOP_FOREGROUND_REMOVE)
-        battery.currentScalar = settings.getFloat("currentScalar", 1f).toDouble()
-        battery.invertCurrent = settings.getBoolean("invertCurrent", false)
+        battery.currentScalar = settings.getFloat("currentScalar", 1000f).toDouble()
+        battery.invertCurrent = settings.getBoolean("invertCurrent", true)
         useFahrenheit = settings.getBoolean("useFahrenheit", false)
         indicatorEntries = settings.getStringSet("indicatorEntries", null) ?: emptySet()
         notificationIndicator = settings.getString("notificationIndicator", "W") ?: "W"
