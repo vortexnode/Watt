@@ -80,8 +80,9 @@ class BeamNotificationTileService : TileService() {
         ioExecutor.execute {
             prefs.edit().putBoolean("notificationEnabled", target).commit()
             if (target) {
-                startForegroundService(Intent(this, StatusService::class.java))
+                ChargingMonitorScheduler.schedule(this)
             } else {
+                ChargingMonitorScheduler.cancel(this)
                 sendBroadcast(Intent(settingsUpdateInd).setPackage(packageName))
             }
         }
