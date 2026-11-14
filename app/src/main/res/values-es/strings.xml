@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Charging Power</string>
+    <string name="app_name">Watt</string>
     <string name="back">Atrás</string>
     <string name="battery">Batería</string>
     <string name="charging">Cargando</string>
