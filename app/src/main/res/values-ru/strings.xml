@@ -106,10 +106,10 @@
     <string name="batteryUsage">Системный монитор батареи</string>
     <string name="batteryUsageDesc">Открыть системный монитор батареи Android</string>
     <string name="vendorBatteryTitle">Ограничения фоновой активности</string>
-    <string name="vendorBatteryDesc">Разрешить Beam запускаться автоматически и исключить его из ограничений расхода батареи, чтобы уведомление продолжало отображаться</string>
+    <string name="vendorBatteryDesc">Разрешить Watt запускаться автоматически и исключить его из ограничений расхода батареи, чтобы уведомление продолжало отображаться</string>
     <string name="vendorBatteryRestricted">Фоновая активность ограничена, уведомление может перестать обновляться</string>
-    <string name="vendorHintTitle">Продолжать работу Beam</string>
-    <string name="vendorHintBody">%1$s агрессивно останавливает работу фоновых приложений. Для обновления уведомления батареи включите автозапуск и отключите ограничения фоновой активности Beam в системных настройках.</string>
+    <string name="vendorHintTitle">Продолжать работу Watt</string>
+    <string name="vendorHintBody">%1$s агрессивно останавливает работу фоновых приложений. Для обновления уведомления батареи включите автозапуск и отключите ограничения фоновой активности Watt в системных настройках.</string>
     <string name="vendorHintOpenSettings">Открыть настройки</string>
     <string name="learnMore">Узнать больше</string>
     <string name="systemNotificationSettings">Системные настройки уведомлений</string>
@@ -143,4 +143,7 @@
     <string name="alarmHighText">Заряд достиг %1$d%%</string>
     <string name="alarmTempText">Температура достигла %1$d°C</string>
     <string name="alarmTempTextF">Температура достигла %1$d°F</string>
+    <string name="chargingPowerTitle">CHARGING POWER</string>
+    <string name="connectCharger">Connect charger</string>
+    <string name="readingPower">Reading charging data…</string>
 </resources>
