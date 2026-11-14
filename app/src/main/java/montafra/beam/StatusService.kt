@@ -778,7 +778,9 @@ class StatusService : Service() {
         return Notification.Builder(this, noteChannelId)
             .setContentTitle("$powerText W")
             .setContentText("Charging")
-            .setStyle(Notification.BigTextStyle().bigText("Charging"))
+            // Experiment A: use Android's standard notification template instead of BigTextStyle.
+            // Keep the same title and text so the test isolates the template change.
+            // This does not alter the charging lifecycle or Live Update promotion request.
             .setSmallIcon(R.drawable.ico_lightning)
             .setContentIntent(noteIntent)
             .setOngoing(true)
