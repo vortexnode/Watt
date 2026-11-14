@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.BatteryManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -97,7 +98,7 @@ fun ChargingPowerScreen() {
     // Poll instantaneous BatteryManager readings once per second only while plugged in.
     LaunchedEffect(context, plugged) {
         if (plugged) {
-            while (plugged) {
+            while (true) {
                 val result = runCatching { readUiPower(context) }.getOrNull()
                 if (result != null) {
                     if (!result.plugged) {
