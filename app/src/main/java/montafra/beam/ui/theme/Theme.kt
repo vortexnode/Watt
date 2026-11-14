@@ -18,7 +18,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 @Composable
-fun BeamTheme(content: @Composable () -> Unit) {
+fun WattTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
     val dark = isSystemInDarkTheme()
     val scheme = remember(context, dark) {

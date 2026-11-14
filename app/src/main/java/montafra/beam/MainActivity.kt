@@ -15,7 +15,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import montafra.beam.ui.theme.BeamTheme
+import montafra.beam.ui.theme.WattTheme
 import rikka.shizuku.Shizuku
 
 const val namespace = "montafra.beam"
@@ -185,7 +185,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            BeamTheme {
+            WattTheme {
                 ChargingPowerScreen()
             }
         }

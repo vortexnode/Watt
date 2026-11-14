@@ -43,6 +43,8 @@ class RoutineActionActivity : Activity() {
             return
         }
 
+        ChargingMonitorScheduler.schedule(this)
+
         try {
             val serviceIntent = Intent(this, StatusService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -57,6 +59,7 @@ class RoutineActionActivity : Activity() {
     }
 
     private fun stopChargingMonitor() {
+        ChargingMonitorScheduler.cancel(this)
         stopService(Intent(this, StatusService::class.java))
         Log.i(TAG, "Charging monitor stop requested by Samsung Modes and Routines")
     }
