@@ -455,7 +455,7 @@ class StatusService : Service() {
             NotificationChannel(
                 noteChannelId,
                 "Charging Power",
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Live charging power shown while a charger is connected"
             }
@@ -579,7 +579,6 @@ class StatusService : Service() {
             .setContentIntent(noteIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setSilent(true)
             .build()
 
     private fun buildNotification(): Notification {
@@ -592,7 +591,6 @@ class StatusService : Service() {
             .setContentIntent(noteIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setSilent(true)
             // Android 16 Live Updates promotion request. The typed API is 36.1+;
             // using the documented extra keeps this source compatible with compileSdk 36.
             .addExtras(android.os.Bundle().apply {
