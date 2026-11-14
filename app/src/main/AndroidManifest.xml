@@ -38,8 +38,11 @@
         <service
             android:name=".StatusService"
             android:process=":batteryStatus"
-            android:foregroundServiceType="specialUse"
-        />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Monitor the battery while charging and publish the user's live charging-power notification." />
+        </service>
         <service
             android:name=".BeamNotificationTileService"
             android:icon="@drawable/ico_tile"
