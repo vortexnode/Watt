@@ -124,6 +124,7 @@ class StatusService : Service() {
     private var powerSupplyReader: IPowerSupplyReader? = null
     private var shizukuServiceBound = false
     private var powerDebug = "Waiting for battery data"
+    private var shizukuBindState = "not attempted"
 
     private val shizukuArgs by lazy {
         Shizuku.UserServiceArgs(
@@ -135,11 +136,13 @@ class StatusService : Service() {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             powerSupplyReader = service?.let { IPowerSupplyReader.Stub.asInterface(it) }
             shizukuServiceBound = powerSupplyReader != null
+            shizukuBindState = if (shizukuServiceBound) "connected" else "connected with null binder"
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             powerSupplyReader = null
             shizukuServiceBound = false
+            shizukuBindState = "service disconnected"
         }
     }
 
@@ -225,13 +228,26 @@ class StatusService : Service() {
 
     private fun bindShizukuReader() {
         try {
-            if (Shizuku.isPreV11() || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) return
+            if (!Shizuku.pingBinder()) {
+                shizukuBindState = "Shizuku binder unavailable"
+                return
+            }
+            if (Shizuku.isPreV11()) {
+                shizukuBindState = "Shizuku API below v11"
+                return
+            }
+            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                shizukuBindState = "permission not granted"
+                return
+            }
             if (shizukuServiceBound) return
+            shizukuBindState = "bind requested"
             shizukuServiceBound = true
             Shizuku.bindUserService(shizukuArgs, shizukuConnection)
         } catch (e: Throwable) {
             shizukuServiceBound = false
-            Log.w(this::class.java.name, "Shizuku power reader unavailable; using BatteryManager", e)
+            shizukuBindState = "bind error: " + e.javaClass.simpleName + ": " + e.message
+            Log.w(this.javaClass.name, "Shizuku power reader unavailable; using BatteryManager", e)
         }
     }
 
@@ -256,8 +272,10 @@ class StatusService : Service() {
         powerDebug = buildString {
             append("Shizuku permission="); append(permission)
             append(", readerBound="); append(shizukuServiceBound)
+            append(", bindState="); append(shizukuBindState)
             append(", sysfs="); append(metrics?.ifBlank { "empty" } ?: "null")
-            append(", API current="); append(apiSnapshot.currentRaw)
+            append(", API currentNow_uA="); append(apiSnapshot.currentRaw)
+            append(", API currentAvg_uA="); append(battery.currentAverageRaw())
             append(", API voltage_mV="); append(apiSnapshot.voltsRaw)
             append(", selected="); append(if (sysfsIsUseful) "Shizuku sysfs" else "BatteryManager")
         }
