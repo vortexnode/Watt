@@ -123,6 +123,8 @@ class StatusService : Service() {
     private var chargingWakeLock: PowerManager.WakeLock? = null
     private var powerSupplyReader: IPowerSupplyReader? = null
     private var shizukuServiceBound = false
+    private var shizukuListenersRegistered = false
+    private var chargingSessionActive = false
     private var powerDebug = "Waiting for battery data"
     private var shizukuBindState = "not attempted"
     private var isForeground = false
@@ -148,7 +150,7 @@ class StatusService : Service() {
     }
 
     private val shizukuBinderReceivedListener = Shizuku.OnBinderReceivedListener {
-        bindShizukuReader()
+        if (chargingSessionActive) bindShizukuReader()
     }
 
     private val shizukuBinderDeadListener = Shizuku.OnBinderDeadListener {
@@ -168,17 +170,15 @@ class StatusService : Service() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 batteryDataReq -> updateData()
-                shizukuPermissionGranted -> bindShizukuReader()
+                shizukuPermissionGranted -> if (chargingSessionActive) bindShizukuReader()
                 settingsUpdateInd -> {
                     loadSettings()
                     update()
                 }
                 Intent.ACTION_BATTERY_CHANGED -> {
-                    // Driven by the OS even while the screen is off (the PeriodicTask is
-                    // paused then), so alarms still fire. Only refresh the snapshot + check
-                    // thresholds here; the status notification is left untouched. Skipped
-                    // entirely when no alarm is enabled, so non-users don't wake on every change.
-                    if (alarms.any { it.enabled }) {
+                    // Watt is a charging-only monitor. Do not sample battery metrics from
+                    // battery-change broadcasts while unplugged.
+                    if (chargingSessionActive && alarms.any { it.enabled }) {
                         snapshot = readBatterySnapshot()
                         checkAlarms()
                     }
@@ -189,12 +189,11 @@ class StatusService : Service() {
                 }
                 Intent.ACTION_POWER_DISCONNECTED -> {
                     pluggedInAt = null
-                    // Recorded before the reset so the persist inside it stores the edge, and so
-                    // the syncPlugState() in update() below does not see the same edge a second
-                    // time once the sticky battery broadcast catches up.
                     wasPlugged = false
                     startScreenTimeSession()
-                    update()
+                    // Do not take another sensor snapshot on the unplug event. End the session
+                    // immediately, release the wake lock and stop the Shizuku daemon reader.
+                    endChargingSession()
                 }
                 Intent.ACTION_SCREEN_OFF -> {
                     // Charging power is a Live Update and must keep refreshing with the display off.
@@ -203,11 +202,10 @@ class StatusService : Service() {
                     persistScreenTime()
                 }
                 Intent.ACTION_SCREEN_ON -> {
-                    // start() ticks synchronously, and update() -> reconcileScreenTime() opens the
-                    // period if the device is already past the keyguard. On a locked device that
-                    // happens at ACTION_USER_PRESENT below, or at the first tick after the
-                    // keyguard goes away.
-                    task.start()
+                    // Screen state must never restart sensor polling outside an active cable session.
+                    if (chargingSessionActive && (snapshot.plugged ?: snapshot.charging)) {
+                        task.start()
+                    }
                 }
                 Intent.ACTION_USER_PRESENT -> {
                     // Only here to react without waiting for the next poll; reconcile decides, so
@@ -228,6 +226,7 @@ class StatusService : Service() {
     }
 
     private fun bindShizukuReader() {
+        if (!chargingSessionActive) return
         try {
             if (!Shizuku.pingBinder()) {
                 shizukuBindState = "Shizuku binder unavailable"
@@ -254,6 +253,9 @@ class StatusService : Service() {
 
     private fun readBatterySnapshot(): BatterySnapshot {
         val apiSnapshot = battery.snapshot()
+        // BatteryManager is sampled once to detect the unplug edge. Do not access sysfs or
+        // Shizuku at all when the cable is absent.
+        if (!(apiSnapshot.plugged ?: apiSnapshot.charging)) return apiSnapshot
         val metrics = try {
             powerSupplyReader?.readBatteryMetrics()
         } catch (e: Throwable) {
@@ -551,16 +553,9 @@ class StatusService : Service() {
         // charging-current sign used by Beam's charging heuristics.
         battery.currentScalar = 1000.0
         battery.invertCurrent = true
-        try {
-            ShizukuProvider.enableMultiProcessSupport(false)
-            ShizukuProvider.requestBinderForNonProviderProcess(this)
-            Shizuku.addBinderReceivedListenerSticky(shizukuBinderReceivedListener)
-            Shizuku.addBinderDeadListener(shizukuBinderDeadListener)
-            bindShizukuReader()
-        } catch (_: Throwable) {
-            // Shizuku is optional; BatteryManager remains the fallback.
-        }
-        snapshot = readBatterySnapshot()
+        // Do not start Shizuku or its daemon reader during service construction. It is
+        // attached only after onStartCommand has confirmed an active charging session.
+        snapshot = battery.snapshot()
         // Before the channels, so the alarm channel is named in the picked language from the start.
         applyAppLanguage(getSharedPreferences(settingsName, MODE_MULTI_PROCESS))
 
@@ -629,13 +624,26 @@ class StatusService : Service() {
         debug("onStartCommand()")
         super.onStartCommand(intent, flags, startId)
         loadSettings()
-        snapshot = readBatterySnapshot()
+        // First perform only the minimum BatteryManager state check. No Shizuku binding,
+        // sysfs read, wake lock or recurring poll is allowed when unplugged.
+        snapshot = battery.snapshot()
         val plugged = snapshot.plugged ?: snapshot.charging
         if (!notificationEnabled || !plugged) {
+            task.stop()
             stopSelf(startId)
             return START_NOT_STICKY
         }
+        chargingSessionActive = true
         try {
+            ShizukuProvider.enableMultiProcessSupport(false)
+            ShizukuProvider.requestBinderForNonProviderProcess(this)
+            if (!shizukuListenersRegistered) {
+                Shizuku.addBinderReceivedListenerSticky(shizukuBinderReceivedListener)
+                Shizuku.addBinderDeadListener(shizukuBinderDeadListener)
+                shizukuListenersRegistered = true
+            }
+            bindShizukuReader()
+            snapshot = readBatterySnapshot()
             // The Live Update itself is the foreground-service notification. There is no
             // separate permanent "monitoring" notification.
             startForeground(liveNoteId, buildNotification())
@@ -648,17 +656,47 @@ class StatusService : Service() {
         return START_NOT_STICKY
     }
 
+    private fun unbindShizukuReader() {
+        powerSupplyReader = null
+        if (shizukuListenersRegistered) {
+            try {
+                Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
+                Shizuku.removeBinderDeadListener(shizukuBinderDeadListener)
+            } catch (_: Throwable) {
+            }
+            shizukuListenersRegistered = false
+        }
+        if (shizukuServiceBound) {
+            try {
+                Shizuku.unbindUserService(shizukuArgs, shizukuConnection, true)
+            } catch (e: Throwable) {
+                Log.w(this::class.java.name, "Could not stop Shizuku reader", e)
+            }
+        }
+        shizukuServiceBound = false
+        shizukuBindState = "stopped while unplugged"
+    }
+
+    private fun endChargingSession() {
+        chargingSessionActive = false
+        task.stop()
+        syncChargingWakeLock(false)
+        noteMgr.cancel(liveNoteId)
+        if (isForeground) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            isForeground = false
+        }
+        unbindShizukuReader()
+        stopSelf()
+    }
+
     override fun onDestroy() {
         debug("onDestroy()")
+        chargingSessionActive = false
         task.stop()
         chargingWakeLock?.let { if (it.isHeld) it.release() }
         if (initialized) unregisterReceiver(msgReceiver)
-        try {
-            Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
-            Shizuku.removeBinderDeadListener(shizukuBinderDeadListener)
-            if (shizukuServiceBound) Shizuku.unbindUserService(shizukuArgs, shizukuConnection, true)
-        } catch (_: Throwable) {
-        }
+        unbindShizukuReader()
         super.onDestroy()
     }
 
@@ -799,7 +837,11 @@ class StatusService : Service() {
         syncPlugState()
         reconcileScreenTime()
         val plugged = snapshot.plugged ?: snapshot.charging
-        syncChargingWakeLock(plugged)
+        if (!notificationEnabled || !plugged) {
+            endChargingSession()
+            return
+        }
+        syncChargingWakeLock(true)
         if (notificationEnabled && plugged) {
             val live = buildNotification()
             if (!isForeground) {
@@ -821,9 +863,7 @@ class StatusService : Service() {
                 isForeground = false
             }
             if (!notificationEnabled || !plugged) {
-                task.stop()
-                syncChargingWakeLock(false)
-                stopSelf()
+                endChargingSession()
                 return
             }
         }
