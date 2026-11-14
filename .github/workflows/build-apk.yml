@@ -1,9 +1,6 @@
 name: Build APK
 
 on:
-  push:
-    branches:
-      - feature/live-charging-power
   pull_request:
     branches:
       - master
@@ -11,6 +8,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: charging-power-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   debug-apk:
