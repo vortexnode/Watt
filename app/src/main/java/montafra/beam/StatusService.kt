@@ -235,6 +235,7 @@ class StatusService : Service() {
     }
 
     private fun readBatterySnapshot(): BatterySnapshot {
+        val apiSnapshot = battery.snapshot()
         val metrics = try {
             powerSupplyReader?.readBatteryMetrics()
         } catch (e: Throwable) {
@@ -244,10 +245,10 @@ class StatusService : Service() {
         val parts = metrics?.split('|')
         val sysfsCurrent = parts?.getOrNull(0)?.toLongOrNull()
         val sysfsVoltage = parts?.getOrNull(1)?.toLongOrNull()
-        if (sysfsCurrent != null && sysfsVoltage != null && sysfsVoltage > 0L) {
-            return battery.snapshot(sysfsCurrent, sysfsVoltage)
-        }
-        return battery.snapshot()
+        val sysfsIsUseful = sysfsCurrent != null && sysfsVoltage != null &&
+            sysfsVoltage > 0L && (sysfsCurrent != 0L || apiSnapshot.currentRaw == null || apiSnapshot.currentRaw == 0L)
+        if (sysfsIsUseful) return battery.snapshot(sysfsCurrent, sysfsVoltage)
+        return apiSnapshot
     }
 
     private fun loadSettings() {
