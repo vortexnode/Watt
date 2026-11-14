@@ -776,26 +776,17 @@ class StatusService : Service() {
     private fun buildNotification(): Notification {
         val powerText = snapshot.watts?.let { fmt(abs(it)) } ?: "—"
         val powerLabel = "$powerText W"
-        val builder = Notification.Builder(this, noteChannelId)
+        // Keep the charging value in one notification field only. Samsung Now Bar can
+        // render title, subText and shortCriticalText together; repeating the same value
+        // across those fields makes the wattage appear twice or overlap.
+        return Notification.Builder(this, noteChannelId)
             .setContentTitle(powerLabel)
             .setContentText("Charging")
-            // Promoted Live Updates can surface subText in their header. Keep the live
-            // charging value available there as well as in the regular notification title.
-            .setSubText(powerLabel)
             .setStyle(Notification.BigTextStyle().bigText("Charging"))
             .setSmallIcon(R.drawable.ico_lightning)
             .setContentIntent(noteIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-
-        // Android 16's compact Live Update chip prioritizes shortCriticalText. Samsung's
-        // lock-screen Now Bar may use this compact representation, so expose the watt value
-        // explicitly (the platform recommends no more than 7 characters).
-        if (android.os.Build.VERSION.SDK_INT >= 36) {
-            builder.setShortCriticalText(powerLabel.take(7))
-        }
-
-        return builder
             // Android 16 Live Updates promotion request. The typed request API is 36.1+;
             // using the documented extra keeps this source compatible with compileSdk 36.
             .addExtras(android.os.Bundle().apply {
