@@ -821,7 +821,7 @@ class StatusService : Service() {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 isForeground = false
             }
-            if (!plugged) {
+            if (!notificationEnabled || !plugged) {
                 task.stop()
                 syncChargingWakeLock(false)
                 stopSelf()
