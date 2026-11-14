@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "beam"
+rootProject.name = "Watt"
 include("app")
