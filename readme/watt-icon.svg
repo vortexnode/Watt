@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs>
+ <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00E8C8"/><stop offset="1" stop-color="#00BFA5"/></linearGradient>
+ <radialGradient id="bg"><stop stop-color="#172124"/><stop offset="1" stop-color="#080C0E"/></radialGradient>
+ <filter id="glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="9" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="512" height="512" rx="112" fill="url(#bg)"/>
+<path d="M194 90 C126 112 88 168 88 250 C88 347 163 424 256 424 C349 424 424 347 424 250 C424 168 386 112 318 90" fill="none" stroke="#00BFA5" stroke-width="31" stroke-linecap="round" opacity=".18" filter="url(#glow)"/>
+<path d="M194 90 C126 112 88 168 88 250 C88 347 163 424 256 424 C349 424 424 347 424 250 C424 168 386 112 318 90" fill="none" stroke="url(#ring)" stroke-width="25" stroke-linecap="round"/>
+<rect x="194" y="194" width="124" height="178" rx="29" fill="#FFF"/>
+<rect x="222" y="163" width="68" height="42" rx="15" fill="#FFF"/>
+</svg>

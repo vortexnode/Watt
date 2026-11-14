@@ -1,4 +1,4 @@
-<p align="center"><img src="app/src/main/ic_launcher-playstore.png" alt="Watt app icon" width="128" /></p>
+<p align="center"><img src="readme/watt-icon.svg" alt="Watt app icon" width="128" /></p>
 
 <h1 align="center">Watt</h1>
 <p align="center"><em>Live charging-power monitor for Android.</em></p>

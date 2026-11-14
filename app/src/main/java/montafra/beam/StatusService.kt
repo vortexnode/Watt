@@ -280,7 +280,7 @@ class StatusService : Service() {
             append(", API voltage_mV="); append(apiSnapshot.voltsRaw)
             append(", selected="); append(if (sysfsIsUseful) "Shizuku sysfs" else "BatteryManager")
         }
-        if (sysfsIsUseful) return battery.snapshot(sysfsCurrent, sysfsVoltage)
+        if (sysfsIsUseful) return battery.snapshot(sysfsCurrent, sysfsVoltage, currentScalarOverride = 1.0)
         return apiSnapshot
     }
 
@@ -760,7 +760,6 @@ class StatusService : Service() {
             )
             // Plug state for the home screen's bolt and plug-in animation. Plug, not charging
             // status, for the same charge-limiting reason as checkAlarms().
-            .putExtra("plugged", snapshot.plugged ?: snapshot.charging)
             .putExtra("plugged", snapshot.plugged ?: snapshot.charging)
             .putExtra("chargeLevel", fmtPercent(snapshot.levelPercent) + "%")
             .putExtra("chargingSince",

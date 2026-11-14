@@ -6,10 +6,10 @@
         Platform alias: values-night overrides only this empty style (and the color resources
         above), so every shared window item lives exactly once, on Base below. Styles resolve
         their parent at runtime, so Base picks up the dark parent in dark mode, and the
-        values-v29 overlay still only has to add the contrast flag on top of Theme.Wattz.
+        values-v29 overlay still only has to add the contrast flag on top of Theme.Watt.
     -->
-    <style name="Platform.Theme.Wattz" parent="Theme.Material3.Light.NoActionBar" />
-    <style name="Base.Theme.Wattz" parent="Platform.Theme.Wattz">
+    <style name="Platform.Theme.Watt" parent="Theme.Material3.Light.NoActionBar" />
+    <style name="Base.Theme.Watt" parent="Platform.Theme.Watt">
         <item name="colorPrimary">@color/primary</item>
         <item name="colorOnPrimary">@color/text_on_primary</item>
         <item name="android:statusBarColor">?attr/colorPrimary</item>
@@ -30,8 +30,8 @@
         <item name="android:textColor">@color/foreground</item>
         <item name="android:windowBackground">@color/background</item>
     </style>
-    <style name="Theme.Wattz" parent="Base.Theme.Wattz" />
-    <style name="ThemeOverlay.Wattz.Oled" parent="">
+    <style name="Theme.Watt" parent="Base.Theme.Watt" />
+    <style name="ThemeOverlay.Watt.Oled" parent="">
         <item name="android:windowBackground">@color/oled_black</item>
         <item name="colorSurface">@color/oled_black</item>
         <item name="colorSurfaceVariant">#0d0d0d</item>

@@ -75,7 +75,7 @@ class Battery(private val ctx: Context) {
 
     fun currentAverageRaw(): Long? = prop(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE)
 
-    fun snapshot(currentOverride: Long? = null, voltageOverride: Long? = null): BatterySnapshot {
+    fun snapshot(currentOverride: Long? = null, voltageOverride: Long? = null, currentScalarOverride: Double? = null): BatterySnapshot {
         val batteryIntent = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val levelScale = prop(BatteryManager.EXTRA_SCALE, batteryIntent)?.toDouble()
         val level = prop(BatteryManager.EXTRA_LEVEL, batteryIntent)?.toDouble()
@@ -84,7 +84,7 @@ class Battery(private val ctx: Context) {
             chargeTimeRemainingRaw = mgr.computeChargeTimeRemaining(),
             currentRaw = currentOverride ?: prop(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW),
             chargeStatus = ChargeStatus.fromRaw(prop(BatteryManager.EXTRA_STATUS, batteryIntent)?.toInt()),
-            currentScalar = currentScalar,
+            currentScalar = currentScalarOverride ?: currentScalar,
             energyRaw = prop(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER),
             level = level.div(levelScale),
             invertCurrent = invertCurrent,
