@@ -2,10 +2,13 @@ package montafra.beam
 
 import android.app.*
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.content.ServiceConnection
+import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.graphics.*
 import android.graphics.drawable.Icon
@@ -18,6 +21,9 @@ import java.time.LocalDateTime
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import androidx.core.content.edit
+import com.vortexnode.chargingpower.IPowerSupplyReader
+import rikka.shizuku.Shizuku
+import rikka.shizuku.ShizukuProvider
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
@@ -114,6 +120,36 @@ class StatusService : Service() {
     private val metricOrder = listOf("W", "A", "Ah", "C", "V", "Wh", "%")
     private lateinit var noteIntent: PendingIntent
     private lateinit var noteMgr: NotificationManager
+    private var chargingWakeLock: PowerManager.WakeLock? = null
+    private var powerSupplyReader: IPowerSupplyReader? = null
+    private var shizukuServiceBound = false
+
+    private val shizukuArgs by lazy {
+        Shizuku.UserServiceArgs(
+            ComponentName(packageName, PowerSupplyUserService::class.java.name)
+        ).daemon(true).tag("charging-power-reader").version(1)
+    }
+
+    private val shizukuConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            powerSupplyReader = service?.let { IPowerSupplyReader.Stub.asInterface(it) }
+            shizukuServiceBound = powerSupplyReader != null
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            powerSupplyReader = null
+            shizukuServiceBound = false
+        }
+    }
+
+    private val shizukuBinderReceivedListener = Shizuku.OnBinderReceivedListener {
+        bindShizukuReader()
+    }
+
+    private val shizukuBinderDeadListener = Shizuku.OnBinderDeadListener {
+        powerSupplyReader = null
+        shizukuServiceBound = false
+    }
     private var pluggedInAt: ZonedDateTime? = null
     private lateinit var snapshot: BatterySnapshot
     private val task = PeriodicTask({ update() }, { pollIntervalMs })
@@ -127,6 +163,7 @@ class StatusService : Service() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 batteryDataReq -> updateData()
+                shizukuPermissionGranted -> bindShizukuReader()
                 settingsUpdateInd -> {
                     loadSettings()
                     update()
@@ -137,7 +174,7 @@ class StatusService : Service() {
                     // thresholds here; the status notification is left untouched. Skipped
                     // entirely when no alarm is enabled, so non-users don't wake on every change.
                     if (alarms.any { it.enabled }) {
-                        snapshot = battery.snapshot()
+                        snapshot = readBatterySnapshot()
                         checkAlarms()
                     }
                 }
@@ -155,9 +192,10 @@ class StatusService : Service() {
                     update()
                 }
                 Intent.ACTION_SCREEN_OFF -> {
+                    // Charging power is a Live Update and must keep refreshing with the display off.
+                    // Screen-time bookkeeping is still closed, but the battery poller stays alive.
                     closeScreenOnPeriod()
                     persistScreenTime()
-                    task.stop()
                 }
                 Intent.ACTION_SCREEN_ON -> {
                     // start() ticks synchronously, and update() -> reconcileScreenTime() opens the
@@ -182,6 +220,36 @@ class StatusService : Service() {
                 }
             }
         }
+    }
+
+    private fun bindShizukuReader() {
+        try {
+            if (Shizuku.isPreV11() || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) return
+            if (shizukuServiceBound) return
+            shizukuServiceBound = true
+            Shizuku.bindUserService(shizukuArgs, shizukuConnection)
+        } catch (e: Throwable) {
+            shizukuServiceBound = false
+            Log.w(this::class.java.name, "Shizuku power reader unavailable; using BatteryManager", e)
+        }
+    }
+
+    private fun readBatterySnapshot(): BatterySnapshot {
+        val apiSnapshot = battery.snapshot()
+        val metrics = try {
+            powerSupplyReader?.readBatteryMetrics()
+        } catch (e: Throwable) {
+            Log.w(this::class.java.name, "Shizuku battery read failed; using BatteryManager", e)
+            null
+        }
+        val parts = metrics?.split('|')
+        val sysfsCurrent = parts?.getOrNull(0)?.toLongOrNull()
+        // Linux power_supply voltage_now is in microvolts; BatterySnapshot expects millivolts.
+        val sysfsVoltage = parts?.getOrNull(1)?.toLongOrNull()?.div(1_000L)
+        val sysfsIsUseful = sysfsCurrent != null && sysfsVoltage != null &&
+            sysfsVoltage > 0L && (sysfsCurrent != 0L || apiSnapshot.currentRaw == null || apiSnapshot.currentRaw == 0L)
+        if (sysfsIsUseful) return battery.snapshot(sysfsCurrent, sysfsVoltage)
+        return apiSnapshot
     }
 
     private fun loadSettings() {
@@ -445,7 +513,16 @@ class StatusService : Service() {
         initialized = true
 
         battery = Battery(applicationContext)
-        snapshot = battery.snapshot()
+        try {
+            ShizukuProvider.enableMultiProcessSupport(false)
+            ShizukuProvider.requestBinderForNonProviderProcess(this)
+            Shizuku.addBinderReceivedListenerSticky(shizukuBinderReceivedListener)
+            Shizuku.addBinderDeadListener(shizukuBinderDeadListener)
+            bindShizukuReader()
+        } catch (_: Throwable) {
+            // Shizuku is optional; BatteryManager remains the fallback.
+        }
+        snapshot = readBatterySnapshot()
         // Before the channels, so the alarm channel is named in the picked language from the start.
         applyAppLanguage(getSharedPreferences(settingsName, MODE_MULTI_PROCESS))
 
@@ -453,10 +530,19 @@ class StatusService : Service() {
         noteMgr.createNotificationChannel(
             NotificationChannel(
                 noteChannelId,
-                "Power Status",
-                NotificationManager.IMPORTANCE_DEFAULT
+                "Charging Power",
+                NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Continuously displays current battery power consumption"
+                description = "Live charging power shown while a charger is connected"
+            }
+        )
+        noteMgr.createNotificationChannel(
+            NotificationChannel(
+                monitorChannelId,
+                "Charging Power Monitor",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Keeps charging-state monitoring active in the background"
             }
         )
         createAlarmChannel()
@@ -475,6 +561,7 @@ class StatusService : Service() {
             msgReceiver,
             IntentFilter().apply {
                 addAction(batteryDataReq)
+                addAction(shizukuPermissionGranted)
                 addAction(settingsUpdateInd)
                 addAction(Intent.ACTION_BATTERY_CHANGED)
                 addAction(Intent.ACTION_POWER_CONNECTED)
@@ -519,7 +606,7 @@ class StatusService : Service() {
 
         if (notificationEnabled) {
             try {
-                startForeground(noteId, buildNotification())
+                startForeground(noteId, buildMonitorNotification())
             } catch (e: Exception) {
                 Log.e(this::class.java.name, "Failed to foreground StatusService", e)
             }
@@ -531,7 +618,14 @@ class StatusService : Service() {
     override fun onDestroy() {
         debug("onDestroy()")
         task.stop()
+        chargingWakeLock?.let { if (it.isHeld) it.release() }
         if (initialized) unregisterReceiver(msgReceiver)
+        try {
+            Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
+            Shizuku.removeBinderDeadListener(shizukuBinderDeadListener)
+            if (shizukuServiceBound) Shizuku.unbindUserService(shizukuArgs, shizukuConnection, true)
+        } catch (_: Throwable) {
+        }
         super.onDestroy()
     }
 
@@ -561,50 +655,51 @@ class StatusService : Service() {
         return Icon.createWithBitmap(bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: bitmap)
     }
 
-    private fun buildNotification(): Notification {
-        val iconValue = metricValue(notificationIndicator)
-        val iconUnit  = metricUnit(notificationIndicator)
-        val timeText = if (!showTimeToFull) "" else when (val seconds = snapshot.secondsUntilCharged) {
-            null -> ""
-            0.0  -> getString(R.string.fullyCharged)
-            else -> getString(R.string.untilFullCharge, fmtSeconds(seconds))
+    private fun syncChargingWakeLock(plugged: Boolean) {
+        val lock = chargingWakeLock ?: run {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "$namespace:ChargingPowerPoll"
+            ).apply {
+                setReferenceCounted(false)
+                chargingWakeLock = this
+            }
         }
+        if (plugged && !lock.isHeld) {
+            // Keep the CPU awake while cabled so the one-second Live Update continues in Doze.
+            lock.acquire()
+        } else if (!plugged && lock.isHeld) {
+            lock.release()
+        }
+    }
 
-        val builder = Notification.Builder(this, noteChannelId)
-            .setContentTitle("$iconValue $iconUnit")
-            .setSmallIcon(renderIcon(iconValue, iconUnit))
+    private fun buildMonitorNotification(): Notification =
+        Notification.Builder(this, monitorChannelId)
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText("Monitoring for a connected charger")
+            .setSmallIcon(R.drawable.ico_lightning)
             .setContentIntent(noteIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .build()
 
-        val entries = indicatorEntries.filter { it != notificationIndicator }.sortedBy { metricOrder.indexOf(it) }
-        val screenTimeText = if (showScreenTimeInNotification) screenTimeFormatted() else null
-
-        if (entries.isNotEmpty() || screenTimeText != null) {
-            val style = Notification.InboxStyle()
-            entries.forEach { key ->
-                style.addLine("${metricLabel(key)}  ${metricValue(key)}${metricUnit(key)}")
-            }
-            if (screenTimeText != null) {
-                style.addLine("${getString(R.string.screenTime)}  $screenTimeText")
-            }
-            if (timeText.isNotEmpty()) style.setSummaryText(timeText)
-            val compactParts = mutableListOf<String>()
-            entries.forEach { k -> compactParts.add("${metricValue(k)}${metricUnit(k)}") }
-            if (screenTimeText != null) compactParts.add(screenTimeText)
-            builder.setStyle(style).setContentText(compactParts.joinToString("  "))
-        } else {
-            builder.setStyle(null).setContentText(timeText)
-        }
-
-        return try {
-            builder.build()
-        } catch (e: RuntimeException) {
-            // Some ROMs still reject the rendered bitmap icon while copying/scaling it;
-            // fall back to a static icon rather than kill the service.
-            Log.w(this::class.java.name, "Rendered notification icon rejected", e)
-            builder.setSmallIcon(R.drawable.ico_lightning).build()
-        }
+    private fun buildNotification(): Notification {
+        val powerText = snapshot.watts?.let { fmt(abs(it)) } ?: "—"
+        return Notification.Builder(this, noteChannelId)
+            .setContentTitle("$powerText W")
+            .setContentText("Charging")
+            .setStyle(Notification.BigTextStyle().bigText("Charging"))
+            .setSmallIcon(R.drawable.ico_lightning)
+            .setContentIntent(noteIntent)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            // Android 16 Live Updates promotion request. The typed API is 36.1+;
+            // using the documented extra keeps this source compatible with compileSdk 36.
+            .addExtras(android.os.Bundle().apply {
+                putBoolean("android.requestPromotedOngoing", true)
+            })
+            .build()
     }
 
     private fun screenTimeFormatted(): String {
@@ -643,6 +738,7 @@ class StatusService : Service() {
             // Plug state for the home screen's bolt and plug-in animation. Plug, not charging
             // status, for the same charge-limiting reason as checkAlarms().
             .putExtra("plugged", snapshot.plugged ?: snapshot.charging)
+            .putExtra("plugged", snapshot.plugged ?: snapshot.charging)
             .putExtra("chargeLevel", fmtPercent(snapshot.levelPercent) + "%")
             .putExtra("chargingSince",
                 when (val pluggedInAt = pluggedInAt) {
@@ -656,7 +752,7 @@ class StatusService : Service() {
             .putExtra("energy",
                 "${fmt(snapshot.energyWattHours)}Wh (${fmt(snapshot.energyAmpHours)}Ah)"
             )
-            .putExtra("power", fmt(snapshot.watts) + "W")
+            .putExtra("power", fmt(snapshot.watts?.let { abs(it) }) + "W")
             .putExtra("temperature", fmt(displayTemp(snapshot.celsius)) + tempUnit())
             .putExtra("timeToFullCharge",
                 when (val seconds = snapshot.secondsUntilCharged) {
@@ -679,7 +775,13 @@ class StatusService : Service() {
         // had just opened and leave it closed until the next tick.
         syncPlugState()
         reconcileScreenTime()
-        if (notificationEnabled) noteMgr.notify(noteId, buildNotification())
+        val plugged = snapshot.plugged ?: snapshot.charging
+        syncChargingWakeLock(plugged)
+        if (notificationEnabled && plugged) {
+            noteMgr.notify(liveNoteId, buildNotification())
+        } else {
+            noteMgr.cancel(liveNoteId)
+        }
         checkAlarms()
         updateData()
     }

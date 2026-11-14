@@ -40,13 +40,16 @@ import montafra.beam.ui.WorkaroundsSettingsScreen
 import montafra.beam.ui.rememberBeamNavController
 import montafra.beam.ui.theme.BeamTheme
 import montafra.beam.ui.theme.rememberThemePrefs
+import rikka.shizuku.Shizuku
 
 const val namespace = "montafra.beam"
 const val batteryDataReq = "$namespace.battery-data-req"
 const val batteryDataResp = "$namespace.battery-data-resp"
-const val intervalMs = 1_250L
-const val noteChannelId = "$namespace.status.v6"
+const val intervalMs = 1_000L
+const val noteChannelId = "$namespace.live.v1"
+const val monitorChannelId = "$namespace.monitor.v1"
 const val noteId = 1
+const val liveNoteId = 5
 const val alarmChannelId = "$namespace.alarms.v1"
 const val alarmLowNoteId = 2
 const val alarmHighNoteId = 3
@@ -59,6 +62,8 @@ const val alarmTempDefaultThreshold = 40
 const val alarmRepeatDefaultMin = 15
 const val settingsName = "settings"
 const val settingsUpdateInd = "$namespace.settings-update-ind"
+const val shizukuPermissionGranted = "$namespace.shizuku-permission-granted"
+const val shizukuPermissionRequestCode = 7101
 
 val LocalHapticsEnabled = staticCompositionLocalOf { true }
 
@@ -70,6 +75,34 @@ class MainActivity : ComponentActivity() {
         override fun onServiceDisconnected(name: ComponentName?) {}
     }
     private var bound = false
+    private var shizukuListenersRegistered = false
+
+    private val shizukuBinderReceivedListener = Shizuku.OnBinderReceivedListener {
+        try {
+            if (!Shizuku.isPreV11()) {
+                if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                    sendBroadcast(Intent(shizukuPermissionGranted).setPackage(packageName))
+                } else if (!Shizuku.shouldShowRequestPermissionRationale()) {
+                    Shizuku.requestPermission(shizukuPermissionRequestCode)
+                }
+            }
+        } catch (_: Throwable) {
+            // Shizuku is optional; BatteryManager continues to work without it.
+        }
+    }
+
+    private val shizukuPermissionResultListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+        if (requestCode == shizukuPermissionRequestCode && grantResult == PackageManager.PERMISSION_GRANTED) {
+            sendBroadcast(Intent(shizukuPermissionGranted).setPackage(packageName))
+        }
+    }
+
+    private fun registerShizukuListeners() {
+        if (shizukuListenersRegistered) return
+        shizukuListenersRegistered = true
+        Shizuku.addBinderReceivedListenerSticky(shizukuBinderReceivedListener)
+        Shizuku.addRequestPermissionResultListener(shizukuPermissionResultListener)
+    }
 
     private fun getPerm(name: String): Perm {
         val settings = getSharedPreferences(settingsName, MODE_PRIVATE)
@@ -110,10 +143,18 @@ class MainActivity : ComponentActivity() {
         if (permissions.contains(permission.POST_NOTIFICATIONS)) {
             syncNotificationEnabled()
             startStatusService()
+            if (checkSelfPermission(permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                registerShizukuListeners()
+            }
         }
     }
 
     override fun onDestroy() {
+        if (shizukuListenersRegistered) {
+            Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
+            Shizuku.removeRequestPermissionResultListener(shizukuPermissionResultListener)
+            shizukuListenersRegistered = false
+        }
         if (bound) {
             unbindService(serviceConnection)
             bound = false
@@ -152,58 +193,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val themePrefs by rememberThemePrefs()
-            val hapticsEnabled = remember {
-                mutableStateOf(getSharedPreferences(settingsName, MODE_PRIVATE).getBoolean("hapticsEnabled", true))
-            }
-            val soundEnabled = remember {
-                mutableStateOf(getSharedPreferences(settingsName, MODE_PRIVATE).getBoolean("soundEnabled", true))
-            }
-            DisposableEffect(Unit) {
-                val prefs = getSharedPreferences(settingsName, MODE_PRIVATE)
-                val listener = SharedPreferences.OnSharedPreferenceChangeListener { p, key ->
-                    when (key) {
-                        "hapticsEnabled" -> hapticsEnabled.value = p.getBoolean(key, true)
-                        "soundEnabled" -> soundEnabled.value = p.getBoolean(key, true)
-                    }
-                }
-                prefs.registerOnSharedPreferenceChangeListener(listener)
-                onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
-            }
-            val realHaptic = LocalHapticFeedback.current
-            val view = LocalView.current
-            // The app's own tap call sites read LocalTapHaptics and get the platform tap sound on
-            // top of the haptic; the two are gated separately. LocalHapticFeedback itself is only
-            // gated, never given the sound channel: Compose/Material internals (text-selection
-            // handles, stepped-slider ticks) fire through it, and each of those would click.
-            val tapFeedback = remember(realHaptic, view, hapticsEnabled.value, soundEnabled.value) {
-                TapFeedback(
-                    haptics = realHaptic.takeIf { hapticsEnabled.value },
-                    view = view.takeIf { soundEnabled.value },
-                )
-            }
-            val gatedHaptic = if (hapticsEnabled.value) realHaptic else NoOpHapticFeedback
             BeamTheme(themePrefs) {
-                CompositionLocalProvider(
-                    LocalHapticFeedback provides gatedHaptic,
-                    LocalTapHaptics provides tapFeedback,
-                    LocalHapticsEnabled provides hapticsEnabled.value,
-                    LocalSoundEnabled provides soundEnabled.value,
-                    LocalSilentHaptics provides gatedHaptic,
-                ) {
-                val navController = rememberBeamNavController(startRoute = "main")
-                PredictiveNavHost(navController) { route ->
-                    when (route) {
-                        "main" -> MainScreen(navController)
-                        "settings" -> SettingsScreen(navController)
-                        "settings/theme" -> ThemeSettingsScreen(navController)
-                        "settings/theme/color" -> ColorPickerScreen(navController)
-                        "settings/language" -> LanguageSettingsScreen(navController)
-                        "settings/notification" -> NotificationSettingsScreen(navController)
-                        "settings/alarms" -> AlarmsSettingsScreen(navController)
-                        "settings/workarounds" -> WorkaroundsSettingsScreen(navController)
-                    }
-                }
-                } // CompositionLocalProvider
+                ChargingPowerScreen()
             }
         }
     }
