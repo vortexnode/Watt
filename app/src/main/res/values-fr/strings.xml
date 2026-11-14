@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Beam</string>
+    <string name="app_name">Charging Power</string>
     <string name="back">Retour</string>
     <string name="battery">Batterie</string>
     <string name="charging">En charge</string>
