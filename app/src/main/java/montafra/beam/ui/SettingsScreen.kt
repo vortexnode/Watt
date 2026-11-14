@@ -144,8 +144,9 @@ fun SettingsScreen(navController: BeamNavController) {
         notificationEnabled = enabled
         prefs.edit().putBoolean("notificationEnabled", enabled).commit()
         if (enabled) {
-            context.startForegroundService(Intent(context, StatusService::class.java))
+            montafra.beam.ChargingMonitorScheduler.schedule(context)
         } else {
+            montafra.beam.ChargingMonitorScheduler.cancel(context)
             context.sendBroadcast(Intent(settingsUpdateInd).setPackage(context.packageName))
         }
         montafra.beam.BeamNotificationTileService.requestRefresh(context)
