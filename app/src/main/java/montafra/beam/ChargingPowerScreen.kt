@@ -31,6 +31,7 @@ fun ChargingPowerScreen() {
     val context = LocalContext.current
     var power by remember { mutableStateOf("— W") }
     var plugged by remember { mutableStateOf(false) }
+    var diagnostics by remember { mutableStateOf("Waiting for diagnostics…") }
 
     DisposableEffect(context) {
         val receiver = object : BroadcastReceiver() {
@@ -38,6 +39,7 @@ fun ChargingPowerScreen() {
                 if (intent.action != batteryDataResp) return
                 plugged = intent.getBooleanExtra("plugged", false)
                 power = if (plugged) intent.getStringExtra("power") ?: "— W" else "— W"
+                diagnostics = intent.getStringExtra("powerDebug") ?: "No diagnostic data"
             }
         }
         ContextCompat.registerReceiver(
@@ -76,6 +78,11 @@ fun ChargingPowerScreen() {
                 text = if (plugged) "Charging" else "Connect charger",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = diagnostics,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall
             )
         }
     }
