@@ -1,6 +1,10 @@
 package montafra.beam
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,18 +36,19 @@ private data class UiPowerReading(
     val powerText: String?,
 )
 
+private fun isPlugged(intent: Intent?): Boolean {
+    return (intent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+}
+
 private fun readUiPower(context: Context): UiPowerReading {
     val prefs = context.getSharedPreferences(settingsName, Context.MODE_PRIVATE)
     val battery = Battery(context).apply {
-        // Match the Samsung-compatible Beam calibration used by StatusService.
         currentScalar = prefs.getFloat("currentScalar", 1000f).toDouble()
         invertCurrent = prefs.getBoolean("invertCurrent", true)
     }
     val snapshot = battery.snapshot()
     val plugged = snapshot.plugged ?: snapshot.charging
-    val watts = snapshot.watts
-        ?.takeIf { it.isFinite() }
-        ?.let { abs(it) }
+    val watts = snapshot.watts?.takeIf { it.isFinite() }?.let { abs(it) }
     val powerText = watts?.let { String.format(Locale.US, "%.1f W", it) }
     return UiPowerReading(plugged, powerText)
 }
@@ -50,26 +56,67 @@ private fun readUiPower(context: Context): UiPowerReading {
 @Composable
 fun ChargingPowerScreen() {
     val context = LocalContext.current
-    var reading by remember(context) {
-        mutableStateOf(runCatching { readUiPower(context) }.getOrDefault(UiPowerReading(false, null)))
+    val initialPlugged = remember(context) {
+        runCatching {
+            isPlugged(context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)))
+        }.getOrDefault(false)
+    }
+    var plugged by remember(context) { mutableStateOf(initialPlugged) }
+    var powerText by remember(context) { mutableStateOf<String?>(null) }
+
+    // Power connection broadcasts control whether measurement polling is allowed.
+    // No BatteryManager sampling loop exists while the charger is disconnected.
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context, intent: Intent) {
+                when (intent.action) {
+                    Intent.ACTION_POWER_CONNECTED -> {
+                        plugged = true
+                        powerText = null
+                    }
+                    Intent.ACTION_POWER_DISCONNECTED -> {
+                        plugged = false
+                        powerText = null
+                    }
+                }
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_POWER_CONNECTED)
+            addAction(Intent.ACTION_POWER_DISCONNECTED)
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            context.registerReceiver(receiver, filter)
+        }
+        onDispose { runCatching { context.unregisterReceiver(receiver) } }
     }
 
-    // Read BatteryManager directly in the UI process. The previous implementation waited for a
-    // broadcast from StatusService; if that one-shot request raced service startup (or the
-    // notification service was disabled), the screen stayed on "Reading..." indefinitely.
-    // This screen is foreground-only, so a one-second coroutine is lightweight and independent
-    // of Shizuku's optional UserService.
-    LaunchedEffect(context) {
-        while (true) {
-            reading = runCatching { readUiPower(context) }
-                .getOrDefault(UiPowerReading(false, null))
-            delay(1_000L)
+    // Poll instantaneous BatteryManager readings once per second only while plugged in.
+    LaunchedEffect(context, plugged) {
+        if (plugged) {
+            while (plugged) {
+                val result = runCatching { readUiPower(context) }.getOrNull()
+                if (result != null) {
+                    if (!result.plugged) {
+                        plugged = false
+                        powerText = null
+                        break
+                    }
+                    powerText = result.powerText
+                }
+                delay(1_000L)
+            }
+        } else {
+            powerText = null
         }
     }
 
     val status = when {
-        !reading.plugged -> stringResource(R.string.connectCharger)
-        reading.powerText != null -> stringResource(R.string.charging)
+        !plugged -> stringResource(R.string.connectCharger)
+        powerText != null -> stringResource(R.string.charging)
         else -> stringResource(R.string.readingPower)
     }
 
@@ -84,7 +131,7 @@ fun ChargingPowerScreen() {
                 style = MaterialTheme.typography.labelLarge
             )
             Text(
-                if (reading.plugged) reading.powerText ?: "— W" else "— W",
+                if (plugged) powerText ?: "— W" else "— W",
                 color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 56.sp,
                 fontWeight = FontWeight.Bold
