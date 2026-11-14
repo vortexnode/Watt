@@ -633,6 +633,11 @@ class StatusService : Service() {
         debug("onStartCommand()")
         super.onStartCommand(intent, flags, startId)
         loadSettings()
+        // JobScheduler may re-enter its charging job after a system runtime limit. If the
+        // foreground charging session is already active, keep the existing poller intact.
+        if (chargingSessionActive && isForeground && notificationEnabled) {
+            return START_NOT_STICKY
+        }
         // First perform only the minimum BatteryManager state check. No Shizuku binding,
         // sysfs read, wake lock or recurring poll is allowed when unplugged.
         snapshot = battery.snapshot()
