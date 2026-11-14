@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Charging Power</string>
+    <string name="app_name">Watt</string>
     <string name="back">Kembali</string>
     <string name="battery">Baterai</string>
     <string name="charging">Mengisi daya</string>
