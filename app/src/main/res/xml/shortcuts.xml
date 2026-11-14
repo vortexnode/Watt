@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="start_charging_monitor"
+        android:enabled="true"
+        android:icon="@drawable/ico_lightning"
+        android:shortcutShortLabel="@string/shortcut_start_monitoring"
+        android:shortcutLongLabel="@string/shortcut_start_monitoring_long">
+        <intent
+            android:action="montafra.beam.action.START_CHARGING_MONITOR"
+            android:targetPackage="com.vortexnode.chargingpower"
+            android:targetClass="montafra.beam.RoutineActionActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="stop_charging_monitor"
+        android:enabled="true"
+        android:icon="@drawable/ico_lightning"
+        android:shortcutShortLabel="@string/shortcut_stop_monitoring"
+        android:shortcutLongLabel="@string/shortcut_stop_monitoring_long">
+        <intent
+            android:action="montafra.beam.action.STOP_CHARGING_MONITOR"
+            android:targetPackage="com.vortexnode.chargingpower"
+            android:targetClass="montafra.beam.RoutineActionActivity" />
+    </shortcut>
+</shortcuts>

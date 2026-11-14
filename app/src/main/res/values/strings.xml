@@ -1,5 +1,9 @@
 <resources>
     <string name="app_name">Watt</string>
+    <string name="shortcut_start_monitoring">Start Watt</string>
+    <string name="shortcut_start_monitoring_long">Start charging monitor</string>
+    <string name="shortcut_stop_monitoring">Stop Watt</string>
+    <string name="shortcut_stop_monitoring_long">Stop charging monitor</string>
     <string name="back">Back</string>
     <string name="battery">Battery</string>
     <string name="charging">Charging</string>
