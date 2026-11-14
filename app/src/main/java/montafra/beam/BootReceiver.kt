@@ -11,8 +11,19 @@ class BootReceiver : BroadcastReceiver() {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                Log.i(TAG, "Scheduling persisted charging monitor job after ${intent.action}")
+                Log.i(TAG, "Scheduling charging monitor after ${intent.action}")
                 ChargingMonitorScheduler.schedule(context)
+            }
+
+            Intent.ACTION_POWER_CONNECTED -> {
+                Log.i(TAG, "External power connected; requesting immediate monitor start")
+                ChargingMonitorScheduler.startImmediately(context)
+            }
+
+            Intent.ACTION_POWER_DISCONNECTED -> {
+                Log.i(TAG, "External power disconnected; cancelling pending start and stopping monitor")
+                ChargingMonitorScheduler.cancelImmediate(context)
+                context.stopService(Intent(context, StatusService::class.java))
             }
         }
     }
