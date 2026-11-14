@@ -544,6 +544,12 @@ class StatusService : Service() {
         initialized = true
 
         battery = Battery(applicationContext)
+        // Match the confirmed Samsung Galaxy S22 workaround from Beam:
+        // this device reports CURRENT_NOW in mA instead of the expected uA.
+        // A 1000x scalar restores the correct unit; invertCurrent fixes the
+        // charging-current sign used by Beam's charging heuristics.
+        battery.currentScalar = 1000.0
+        battery.invertCurrent = true
         try {
             ShizukuProvider.enableMultiProcessSupport(false)
             ShizukuProvider.requestBinderForNonProviderProcess(this)
