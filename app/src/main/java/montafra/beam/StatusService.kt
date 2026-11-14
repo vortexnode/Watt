@@ -454,10 +454,19 @@ class StatusService : Service() {
         noteMgr.createNotificationChannel(
             NotificationChannel(
                 noteChannelId,
-                "Power Status",
+                "Charging Power",
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Continuously displays current battery power consumption"
+                description = "Live charging power shown while a charger is connected"
+            }
+        )
+        noteMgr.createNotificationChannel(
+            NotificationChannel(
+                monitorChannelId,
+                "Charging Power Monitor",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Keeps charging-state monitoring active in the background"
             }
         )
         createAlarmChannel()
@@ -520,7 +529,7 @@ class StatusService : Service() {
 
         if (notificationEnabled) {
             try {
-                startForeground(noteId, buildNotification())
+                startForeground(noteId, buildMonitorNotification())
             } catch (e: Exception) {
                 Log.e(this::class.java.name, "Failed to foreground StatusService", e)
             }
@@ -562,27 +571,32 @@ class StatusService : Service() {
         return Icon.createWithBitmap(bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: bitmap)
     }
 
-    private fun buildNotification(): Notification {
-        // Plug state, rather than BATTERY_STATUS_CHARGING, also covers Samsung's charge pauses
-        // and adaptive charging. At 100% the Live Update can remain present at 0.0 W while cabled.
-        val plugged = snapshot.plugged ?: snapshot.charging
-        val powerText = snapshot.watts?.let { fmt(abs(it)) } ?: "—"
-        val title = if (plugged) "$powerText W" else getString(R.string.app_name)
-        val detail = if (plugged) "Charging" else "Waiting for charger"
-
-        return Notification.Builder(this, noteChannelId)
-            .setContentTitle(title)
-            .setContentText(detail)
-            .setStyle(Notification.BigTextStyle().bigText(detail))
+    private fun buildMonitorNotification(): Notification =
+        Notification.Builder(this, monitorChannelId)
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText("Monitoring for a connected charger")
             .setSmallIcon(R.drawable.ico_lightning)
             .setContentIntent(noteIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
-            // Android 16 Live Updates promotion request. Use the documented extra directly so
-            // this remains buildable with compileSdk 36 even where the typed API is 36.1+.
+            .build()
+
+    private fun buildNotification(): Notification {
+        val powerText = snapshot.watts?.let { fmt(abs(it)) } ?: "—"
+        return Notification.Builder(this, noteChannelId)
+            .setContentTitle("$powerText W")
+            .setContentText("Charging")
+            .setStyle(Notification.BigTextStyle().bigText("Charging"))
+            .setSmallIcon(R.drawable.ico_lightning)
+            .setContentIntent(noteIntent)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            // Android 16 Live Updates promotion request. The typed API is 36.1+;
+            // using the documented extra keeps this source compatible with compileSdk 36.
             .addExtras(android.os.Bundle().apply {
-                putBoolean("android.requestPromotedOngoing", plugged)
+                putBoolean("android.requestPromotedOngoing", true)
             })
             .build()
     }
@@ -659,7 +673,12 @@ class StatusService : Service() {
         // had just opened and leave it closed until the next tick.
         syncPlugState()
         reconcileScreenTime()
-        if (notificationEnabled) noteMgr.notify(noteId, buildNotification())
+        val plugged = snapshot.plugged ?: snapshot.charging
+        if (notificationEnabled && plugged) {
+            noteMgr.notify(liveNoteId, buildNotification())
+        } else {
+            noteMgr.cancel(liveNoteId)
+        }
         checkAlarms()
         updateData()
     }
