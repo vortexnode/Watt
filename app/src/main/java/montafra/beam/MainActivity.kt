@@ -150,8 +150,8 @@ class MainActivity : ComponentActivity() {
             startStatusService()
         }
 
-        val themePrefs by rememberThemePrefs()
         setContent {
+            val themePrefs by rememberThemePrefs()
             BeamTheme(themePrefs) {
                 ChargingPowerScreen()
             }
