@@ -13,38 +13,31 @@ import android.os.Build
 import android.util.Log
 
 /**
- * Android does not allow ACTION_POWER_CONNECTED to be received by manifest receivers
- * for apps targeting modern SDKs. A persisted JobScheduler job with a charging
- * constraint is the supported system-managed trigger: it starts only while charging
- * and is stopped by the system when external power is removed.
+ * Keeps one persisted charging-constrained job registered with Android.
+ *
+ * JobScheduler is the supported fallback for detecting charging while the app process is
+ * stopped. Its dispatch time is controlled by the system and is not guaranteed to be immediate.
+ * When the UI is visible, MainActivity starts StatusService directly and listens dynamically
+ * for cable changes instead of waiting for this job.
  */
 class ChargingMonitorJobService : JobService() {
 
     override fun onStartJob(params: JobParameters): Boolean {
         val prefs = getSharedPreferences(settingsName, MODE_PRIVATE)
         if (!prefs.getBoolean("notificationEnabled", true)) {
-            jobFinished(params, false)
+            Log.i(TAG, "Charging job ignored: notifications are disabled")
             return false
         }
 
-        val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val plugged = (battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
-        if (!plugged) {
-            Log.i(TAG, "Charging constraint callback without external power; retrying")
+        if (!isPluggedIn()) {
+            Log.i(TAG, "Charging job started without external power; requesting retry")
             jobFinished(params, true)
             return false
         }
 
         return try {
-            val service = Intent(this, StatusService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(service)
-            } else {
-                startService(service)
-            }
-            Log.i(TAG, "Charging job started StatusService")
-            // Keep this lightweight job active for the charging session. JobScheduler
-            // calls onStopJob as soon as the charging constraint is lost.
+            startForegroundService(Intent(this, StatusService::class.java))
+            Log.i(TAG, "Started StatusService from persisted charging job")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Could not start StatusService from charging job", e)
@@ -54,44 +47,57 @@ class ChargingMonitorJobService : JobService() {
     }
 
     override fun onStopJob(params: JobParameters): Boolean {
-        val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val plugged = (battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
-        if (!plugged) {
+        if (!isPluggedIn()) {
             Log.i(TAG, "Charging constraint lost; stopping StatusService")
             stopService(Intent(this, StatusService::class.java))
         } else {
-            Log.i(TAG, "Charging job stopped while still plugged; allowing scheduler retry")
+            Log.i(TAG, "Charging job stopped while still plugged; scheduler may retry")
         }
-        // Keep the persisted job scheduled for the next charging session. If JobScheduler
-        // stopped it for a runtime limit while still plugged, it will also be retried.
         return true
+    }
+
+    private fun isPluggedIn(): Boolean {
+        val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        return (battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
     }
 
     companion object {
         private const val TAG = "ChargingMonitorJob"
+        private const val JOB_ID = 0x57415454
     }
 }
 
 object ChargingMonitorScheduler {
     private const val JOB_ID = 0x57415454
+    private const val TAG = "ChargingMonitorJob"
 
     fun schedule(context: Context) {
         val prefs = context.getSharedPreferences(settingsName, Context.MODE_PRIVATE)
+        val scheduler = context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as JobScheduler
         if (!prefs.getBoolean("notificationEnabled", true)) {
-            cancel(context)
+            scheduler.cancel(JOB_ID)
+            Log.i(TAG, "Charging monitor job cancelled: notifications are disabled")
             return
         }
-        val scheduler = context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as JobScheduler
-        val job = JobInfo.Builder(
+
+        val builder = JobInfo.Builder(
             JOB_ID,
             ComponentName(context, ChargingMonitorJobService::class.java),
         )
             .setRequiresCharging(true)
             .setPersisted(true)
             .setBackoffCriteria(30_000L, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
-            .build()
-        val result = scheduler.schedule(job)
-        Log.i("ChargingMonitorJob", "Scheduled charging monitor job: $result")
+
+        // Prefer this user-visible charging task over ordinary background jobs once eligible.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            builder.setPriority(JobInfo.PRIORITY_HIGH)
+        }
+
+        val result = scheduler.schedule(builder.build())
+        Log.i(TAG, "Scheduled persisted charging monitor: result=$result")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            Log.i(TAG, "Charging job pending reason=${scheduler.getPendingJobReason(JOB_ID)}")
+        }
     }
 
     fun cancel(context: Context) {

@@ -1,6 +1,7 @@
 package montafra.beam
 
 import android.Manifest.permission
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -13,6 +14,7 @@ import android.os.Build
 import android.os.BatteryManager
 import android.os.Bundle
 import android.os.IBinder
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -72,6 +74,16 @@ class MainActivity : ComponentActivity() {
     enum class Perm { Granted, Denied, NotAsked }
 
     private var shizukuListenersRegistered = false
+    private var chargingReceiverRegistered = false
+
+    private val chargingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_POWER_CONNECTED -> startStatusServiceIfPlugged()
+                Intent.ACTION_POWER_DISCONNECTED -> stopChargingService()
+            }
+        }
+    }
 
     private val shizukuBinderReceivedListener = Shizuku.OnBinderReceivedListener {
         try {
@@ -116,9 +128,58 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startStatusService() {
-        // The persisted charging-constrained job is the only automatic trigger. Android
-        // does not deliver ACTION_POWER_CONNECTED to manifest receivers for modern targets.
+        // Keep a persisted system job for the case where the app process is not running.
         ChargingMonitorScheduler.schedule(this)
+        startStatusServiceIfPlugged()
+    }
+
+    private fun isExternalPowerConnected(): Boolean {
+        val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        return (battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+    }
+
+    private fun startStatusServiceIfPlugged() {
+        if (!getSharedPreferences(settingsName, MODE_PRIVATE)
+                .getBoolean("notificationEnabled", true) || !isExternalPowerConnected()) return
+
+        try {
+            val service = Intent(this, StatusService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(service)
+            else startService(service)
+            Log.i("WattCharging", "Visible Activity requested immediate charging monitor start")
+        } catch (e: Exception) {
+            Log.e("WattCharging", "Could not start charging monitor from visible Activity", e)
+        }
+    }
+
+    private fun stopChargingService() {
+        stopService(Intent(this, StatusService::class.java))
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (!chargingReceiverRegistered) {
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_POWER_CONNECTED)
+                addAction(Intent.ACTION_POWER_DISCONNECTED)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(chargingReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                registerReceiver(chargingReceiver, filter)
+            }
+            chargingReceiverRegistered = true
+        }
+        startStatusServiceIfPlugged()
+    }
+
+    override fun onStop() {
+        if (chargingReceiverRegistered) {
+            unregisterReceiver(chargingReceiver)
+            chargingReceiverRegistered = false
+        }
+        super.onStop()
     }
 
     private fun syncNotificationEnabled() {

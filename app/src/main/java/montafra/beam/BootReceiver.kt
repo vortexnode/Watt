@@ -11,9 +11,10 @@ class BootReceiver : BroadcastReceiver() {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                Log.i(TAG, "Scheduling persisted charging monitor job after ${intent.action}")
+                Log.i(TAG, "Scheduling charging monitor after ${intent.action}")
                 ChargingMonitorScheduler.schedule(context)
             }
+
         }
     }
 
