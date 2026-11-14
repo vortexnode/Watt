@@ -123,6 +123,7 @@ class StatusService : Service() {
     private var chargingWakeLock: PowerManager.WakeLock? = null
     private var powerSupplyReader: IPowerSupplyReader? = null
     private var shizukuServiceBound = false
+    private var powerDebug = "Waiting for battery data"
 
     private val shizukuArgs by lazy {
         Shizuku.UserServiceArgs(
@@ -248,6 +249,18 @@ class StatusService : Service() {
         val sysfsVoltage = parts?.getOrNull(1)?.toLongOrNull()?.div(1_000L)
         val sysfsIsUseful = sysfsCurrent != null && sysfsVoltage != null &&
             sysfsVoltage > 0L && (sysfsCurrent != 0L || apiSnapshot.currentRaw == null || apiSnapshot.currentRaw == 0L)
+        val permission = try {
+            if (Shizuku.pingBinder()) Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+            else false
+        } catch (_: Throwable) { false }
+        powerDebug = buildString {
+            append("Shizuku permission="); append(permission)
+            append(", readerBound="); append(shizukuServiceBound)
+            append(", sysfs="); append(metrics?.ifBlank { "empty" } ?: "null")
+            append(", API current="); append(apiSnapshot.currentRaw)
+            append(", API voltage_mV="); append(apiSnapshot.voltsRaw)
+            append(", selected="); append(if (sysfsIsUseful) "Shizuku sysfs" else "BatteryManager")
+        }
         if (sysfsIsUseful) return battery.snapshot(sysfsCurrent, sysfsVoltage)
         return apiSnapshot
     }
@@ -753,6 +766,7 @@ class StatusService : Service() {
                 "${fmt(snapshot.energyWattHours)}Wh (${fmt(snapshot.energyAmpHours)}Ah)"
             )
             .putExtra("power", fmt(snapshot.watts?.let { abs(it) }) + "W")
+            .putExtra("powerDebug", powerDebug)
             .putExtra("temperature", fmt(displayTemp(snapshot.celsius)) + tempUnit())
             .putExtra("timeToFullCharge",
                 when (val seconds = snapshot.secondsUntilCharged) {
