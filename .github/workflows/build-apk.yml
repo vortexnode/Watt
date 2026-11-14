@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/live-charging-power
+      - experiment/now-bar-layout
   pull_request:
     branches:
       - master
