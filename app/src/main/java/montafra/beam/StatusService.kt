@@ -776,12 +776,11 @@ class StatusService : Service() {
     private fun buildNotification(): Notification {
         val powerText = snapshot.watts?.let { fmt(abs(it)) } ?: "—"
         return Notification.Builder(this, noteChannelId)
-            .setContentTitle("$powerText W")
-            .setContentText("Charging")
-            // Experiment A: use Android's standard notification template instead of BigTextStyle.
-            // Keep the same title and text so the test isolates the template change.
-            // This does not alter the charging lifecycle or Live Update promotion request.
-            .setSmallIcon(R.drawable.ico_lightning)
+            // Experiment B: deliberately distinctive content to identify which fields
+            // Samsung's Now Bar actually surfaces from the app notification.
+            .setContentTitle("NOW BAR TEST 123")
+            .setContentText("WATT EXPERIMENT B")
+            .setSmallIcon(R.drawable.ico_alarm)
             .setContentIntent(noteIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
