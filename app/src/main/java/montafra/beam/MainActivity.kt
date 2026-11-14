@@ -116,16 +116,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startStatusService() {
-        if (!getSharedPreferences(settingsName, MODE_PRIVATE).getBoolean("notificationEnabled", true)) return
-        // Start only when the user opens the app during an active charging session.
-        // Later plug-ins are handled by ChargingPowerReceiver.
-        // Read only the sticky plug-state broadcast. Do not sample current/voltage when
-        // the user merely opens Watt while the phone is unplugged.
-        val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val plugged = (batteryIntent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
-        if (plugged) {
-            startForegroundService(Intent(this, StatusService::class.java))
-        }
+        // The persisted charging-constrained job is the only automatic trigger. Android
+        // does not deliver ACTION_POWER_CONNECTED to manifest receivers for modern targets.
+        ChargingMonitorScheduler.schedule(this)
     }
 
     private fun syncNotificationEnabled() {
