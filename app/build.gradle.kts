@@ -32,8 +32,8 @@ configure<ApplicationExtension> {
         applicationId = "com.vortexnode.chargingpower"
         minSdk = 28 // BatteryManager.computeChargeTimeRemaining()
         targetSdk = 36
-        versionCode = 49
-        versionName = "1.0.9"
+        versionCode = 50
+        versionName = "1.0.10"
     }
 
     androidResources {
