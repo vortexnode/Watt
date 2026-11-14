@@ -738,6 +738,7 @@ class StatusService : Service() {
             // Plug state for the home screen's bolt and plug-in animation. Plug, not charging
             // status, for the same charge-limiting reason as checkAlarms().
             .putExtra("plugged", snapshot.plugged ?: snapshot.charging)
+            .putExtra("plugged", snapshot.plugged ?: snapshot.charging)
             .putExtra("chargeLevel", fmtPercent(snapshot.levelPercent) + "%")
             .putExtra("chargingSince",
                 when (val pluggedInAt = pluggedInAt) {
