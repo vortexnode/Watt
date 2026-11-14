@@ -770,7 +770,7 @@ class StatusService : Service() {
     private fun update() {
         debug("update()")
 
-        snapshot = battery.snapshot()
+        snapshot = readBatterySnapshot()
         // Order matters: a session reset that ran after reconcile would zero the period reconcile
         // had just opened and leave it closed until the next tick.
         syncPlugState()
