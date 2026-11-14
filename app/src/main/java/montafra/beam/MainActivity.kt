@@ -75,6 +75,7 @@ class MainActivity : ComponentActivity() {
         override fun onServiceDisconnected(name: ComponentName?) {}
     }
     private var bound = false
+    private var shizukuListenersRegistered = false
 
     private val shizukuBinderReceivedListener = Shizuku.OnBinderReceivedListener {
         try {
@@ -94,6 +95,11 @@ class MainActivity : ComponentActivity() {
         if (requestCode == shizukuPermissionRequestCode && grantResult == PackageManager.PERMISSION_GRANTED) {
             sendBroadcast(Intent(shizukuPermissionGranted).setPackage(packageName))
         }
+    }
+
+    private fun registerShizukuListeners() {
+        if (shizukuListenersRegistered) return
+        shizukuListenersRegistered = true
     }
 
     private fun getPerm(name: String): Perm {
@@ -135,12 +141,18 @@ class MainActivity : ComponentActivity() {
         if (permissions.contains(permission.POST_NOTIFICATIONS)) {
             syncNotificationEnabled()
             startStatusService()
+            if (checkSelfPermission(permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                registerShizukuListeners()
+            }
         }
     }
 
     override fun onDestroy() {
-        Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
-        Shizuku.removeRequestPermissionResultListener(shizukuPermissionResultListener)
+        if (shizukuListenersRegistered) {
+            Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
+            Shizuku.removeRequestPermissionResultListener(shizukuPermissionResultListener)
+            shizukuListenersRegistered = false
+        }
         if (bound) {
             unbindService(serviceConnection)
             bound = false
