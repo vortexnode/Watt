@@ -123,22 +123,27 @@ class StatusService : Service() {
     private var chargingWakeLock: PowerManager.WakeLock? = null
     private var powerSupplyReader: IPowerSupplyReader? = null
     private var shizukuServiceBound = false
+    private var powerDebug = "Waiting for battery data"
+    private var shizukuBindState = "not attempted"
+    private var isForeground = false
 
     private val shizukuArgs by lazy {
         Shizuku.UserServiceArgs(
             ComponentName(packageName, PowerSupplyUserService::class.java.name)
-        ).daemon(true).tag("charging-power-reader").version(1)
+        ).daemon(true).tag("charging-power-reader").processNameSuffix("power-reader").version(2)
     }
 
     private val shizukuConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             powerSupplyReader = service?.let { IPowerSupplyReader.Stub.asInterface(it) }
             shizukuServiceBound = powerSupplyReader != null
+            shizukuBindState = if (shizukuServiceBound) "connected" else "connected with null binder"
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             powerSupplyReader = null
             shizukuServiceBound = false
+            shizukuBindState = "service disconnected"
         }
     }
 
@@ -224,13 +229,26 @@ class StatusService : Service() {
 
     private fun bindShizukuReader() {
         try {
-            if (Shizuku.isPreV11() || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) return
+            if (!Shizuku.pingBinder()) {
+                shizukuBindState = "Shizuku binder unavailable"
+                return
+            }
+            if (Shizuku.isPreV11()) {
+                shizukuBindState = "Shizuku API below v11"
+                return
+            }
+            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                shizukuBindState = "permission not granted"
+                return
+            }
             if (shizukuServiceBound) return
+            shizukuBindState = "bind requested"
             shizukuServiceBound = true
             Shizuku.bindUserService(shizukuArgs, shizukuConnection)
         } catch (e: Throwable) {
             shizukuServiceBound = false
-            Log.w(this::class.java.name, "Shizuku power reader unavailable; using BatteryManager", e)
+            shizukuBindState = "bind error: " + e.javaClass.simpleName + ": " + e.message
+            Log.w(this.javaClass.name, "Shizuku power reader unavailable; using BatteryManager", e)
         }
     }
 
@@ -248,6 +266,20 @@ class StatusService : Service() {
         val sysfsVoltage = parts?.getOrNull(1)?.toLongOrNull()?.div(1_000L)
         val sysfsIsUseful = sysfsCurrent != null && sysfsVoltage != null &&
             sysfsVoltage > 0L && (sysfsCurrent != 0L || apiSnapshot.currentRaw == null || apiSnapshot.currentRaw == 0L)
+        val permission = try {
+            if (Shizuku.pingBinder()) Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+            else false
+        } catch (_: Throwable) { false }
+        powerDebug = buildString {
+            append("Shizuku permission="); append(permission)
+            append(", readerBound="); append(shizukuServiceBound)
+            append(", bindState="); append(shizukuBindState)
+            append(", sysfs="); append(metrics?.ifBlank { "empty" } ?: "null")
+            append(", API currentNow_uA="); append(apiSnapshot.currentRaw)
+            append(", API currentAvg_uA="); append(battery.currentAverageRaw())
+            append(", API voltage_mV="); append(apiSnapshot.voltsRaw)
+            append(", selected="); append(if (sysfsIsUseful) "Shizuku sysfs" else "BatteryManager")
+        }
         if (sysfsIsUseful) return battery.snapshot(sysfsCurrent, sysfsVoltage)
         return apiSnapshot
     }
@@ -257,8 +289,8 @@ class StatusService : Service() {
         if (applyAppLanguage(settings)) createAlarmChannel()
         notificationEnabled = settings.getBoolean("notificationEnabled", true)
         if (!notificationEnabled) stopForeground(STOP_FOREGROUND_REMOVE)
-        battery.currentScalar = settings.getFloat("currentScalar", 1f).toDouble()
-        battery.invertCurrent = settings.getBoolean("invertCurrent", false)
+        battery.currentScalar = settings.getFloat("currentScalar", 1000f).toDouble()
+        battery.invertCurrent = settings.getBoolean("invertCurrent", true)
         useFahrenheit = settings.getBoolean("useFahrenheit", false)
         indicatorEntries = settings.getStringSet("indicatorEntries", null) ?: emptySet()
         notificationIndicator = settings.getString("notificationIndicator", "W") ?: "W"
@@ -513,6 +545,12 @@ class StatusService : Service() {
         initialized = true
 
         battery = Battery(applicationContext)
+        // Match the confirmed Samsung Galaxy S22 workaround from Beam:
+        // this device reports CURRENT_NOW in mA instead of the expected uA.
+        // A 1000x scalar restores the correct unit; invertCurrent fixes the
+        // charging-current sign used by Beam's charging heuristics.
+        battery.currentScalar = 1000.0
+        battery.invertCurrent = true
         try {
             ShizukuProvider.enableMultiProcessSupport(false)
             ShizukuProvider.requestBinderForNonProviderProcess(this)
@@ -534,15 +572,6 @@ class StatusService : Service() {
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Live charging power shown while a charger is connected"
-            }
-        )
-        noteMgr.createNotificationChannel(
-            NotificationChannel(
-                monitorChannelId,
-                "Charging Power Monitor",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Keeps charging-state monitoring active in the background"
             }
         )
         createAlarmChannel()
@@ -594,25 +623,29 @@ class StatusService : Service() {
         init()
         loadSettings()
         restoreServiceState()
-        task.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         debug("onStartCommand()")
-
         super.onStartCommand(intent, flags, startId)
-
         loadSettings()
-
-        if (notificationEnabled) {
-            try {
-                startForeground(noteId, buildMonitorNotification())
-            } catch (e: Exception) {
-                Log.e(this::class.java.name, "Failed to foreground StatusService", e)
-            }
+        snapshot = readBatterySnapshot()
+        val plugged = snapshot.plugged ?: snapshot.charging
+        if (!notificationEnabled || !plugged) {
+            stopSelf(startId)
+            return START_NOT_STICKY
         }
-
-        return START_STICKY
+        try {
+            // The Live Update itself is the foreground-service notification. There is no
+            // separate permanent "monitoring" notification.
+            startForeground(liveNoteId, buildNotification())
+            isForeground = true
+            task.start()
+        } catch (e: Exception) {
+            Log.e(this::class.java.name, "Failed to foreground charging session", e)
+            stopSelf(startId)
+        }
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
@@ -673,16 +706,6 @@ class StatusService : Service() {
             lock.release()
         }
     }
-
-    private fun buildMonitorNotification(): Notification =
-        Notification.Builder(this, monitorChannelId)
-            .setContentTitle(getString(R.string.app_name))
-            .setContentText("Monitoring for a connected charger")
-            .setSmallIcon(R.drawable.ico_lightning)
-            .setContentIntent(noteIntent)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .build()
 
     private fun buildNotification(): Notification {
         val powerText = snapshot.watts?.let { fmt(abs(it)) } ?: "—"
@@ -753,6 +776,7 @@ class StatusService : Service() {
                 "${fmt(snapshot.energyWattHours)}Wh (${fmt(snapshot.energyAmpHours)}Ah)"
             )
             .putExtra("power", fmt(snapshot.watts?.let { abs(it) }) + "W")
+            .putExtra("powerDebug", powerDebug)
             .putExtra("temperature", fmt(displayTemp(snapshot.celsius)) + tempUnit())
             .putExtra("timeToFullCharge",
                 when (val seconds = snapshot.secondsUntilCharged) {
@@ -770,7 +794,7 @@ class StatusService : Service() {
     private fun update() {
         debug("update()")
 
-        snapshot = battery.snapshot()
+        snapshot = readBatterySnapshot()
         // Order matters: a session reset that ran after reconcile would zero the period reconcile
         // had just opened and leave it closed until the next tick.
         syncPlugState()
@@ -778,9 +802,31 @@ class StatusService : Service() {
         val plugged = snapshot.plugged ?: snapshot.charging
         syncChargingWakeLock(plugged)
         if (notificationEnabled && plugged) {
-            noteMgr.notify(liveNoteId, buildNotification())
+            val live = buildNotification()
+            if (!isForeground) {
+                try {
+                    startForeground(liveNoteId, live)
+                    isForeground = true
+                } catch (e: Exception) {
+                    Log.e(this::class.java.name, "Could not start charging foreground session", e)
+                    stopSelf()
+                    return
+                }
+            } else {
+                noteMgr.notify(liveNoteId, live)
+            }
         } else {
             noteMgr.cancel(liveNoteId)
+            if (isForeground) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                isForeground = false
+            }
+            if (!notificationEnabled || !plugged) {
+                task.stop()
+                syncChargingWakeLock(false)
+                stopSelf()
+                return
+            }
         }
         checkAlarms()
         updateData()

@@ -1,0 +1,61 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: charging-power-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore stable signing key
+        env:
+          CHARGING_POWER_SIGNING_BUNDLE: ${{ secrets.CHARGING_POWER_SIGNING_BUNDLE }}
+        run: |
+          set -euo pipefail
+          test -n "$CHARGING_POWER_SIGNING_BUNDLE" || { echo "::error::Repository secret CHARGING_POWER_SIGNING_BUNDLE is missing"; exit 1; }
+          SIGN_DIR="$RUNNER_TEMP/charging-power-signing"
+          mkdir -p "$SIGN_DIR"
+          printf '%s' "$CHARGING_POWER_SIGNING_BUNDLE" | base64 --decode > "$SIGN_DIR/signing.zip"
+          unzip -q "$SIGN_DIR/signing.zip" -d "$SIGN_DIR"
+          CREDENTIALS="$SIGN_DIR/bgdata-signing/CREDENTIALS.txt"
+          test -f "$CREDENTIALS" || { echo "::error::CREDENTIALS.txt not found in signing bundle"; exit 1; }
+          while IFS='=' read -r key value; do
+            case "$key" in
+              KEYSTORE_FILE) echo "KEYSTORE_PATH=$SIGN_DIR/bgdata-signing/$value" >> "$GITHUB_ENV" ;;
+              KEY_ALIAS|KEYSTORE_PASSWORD|KEY_PASSWORD) echo "$key=$value" >> "$GITHUB_ENV" ;;
+            esac
+          done < "$CREDENTIALS"
+          test -s "$KEYSTORE_PATH" || { echo "::error::Keystore file missing or empty"; exit 1; }
+
+      - name: Build signed release APK
+        run: ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Charging Power ${{ github.ref_name }}
+          generate_release_notes: true
+          files: app/build/outputs/apk/release/*.apk
+          fail_on_unmatched_files: true
+          make_latest: true

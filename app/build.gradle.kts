@@ -17,10 +17,14 @@ configure<ApplicationExtension> {
 
     signingConfigs {
         create("release") {
-            storeFile = localProps.getProperty("KEYSTORE_PATH")?.let { file(it) }
-            storePassword = localProps.getProperty("KEYSTORE_PASSWORD")
-            keyAlias = localProps.getProperty("KEY_ALIAS")
-            keyPassword = localProps.getProperty("KEY_PASSWORD")
+            storeFile = System.getenv("KEYSTORE_PATH")?.let { file(it) }
+                ?: localProps.getProperty("KEYSTORE_PATH")?.let { file(it) }
+            storePassword = System.getenv("KEYSTORE_PASSWORD")
+                ?: localProps.getProperty("KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("KEY_ALIAS")
+                ?: localProps.getProperty("KEY_ALIAS")
+            keyPassword = System.getenv("KEY_PASSWORD")
+                ?: localProps.getProperty("KEY_PASSWORD")
         }
     }
 
@@ -28,8 +32,8 @@ configure<ApplicationExtension> {
         applicationId = "com.vortexnode.chargingpower"
         minSdk = 28 // BatteryManager.computeChargeTimeRemaining()
         targetSdk = 36
-        versionCode = 40
-        versionName = "1.0.0"
+        versionCode = 45
+        versionName = "1.0.5"
     }
 
     androidResources {
@@ -49,6 +53,9 @@ configure<ApplicationExtension> {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug {
+            // Keep the existing debug application ID, but sign every CI build with
+            // the same private key so updates install over the previous APK.
+            signingConfig = signingConfigs.getByName("release")
             applicationIdSuffix = ".debug"
         }
     }

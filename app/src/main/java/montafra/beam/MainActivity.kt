@@ -47,7 +47,6 @@ const val batteryDataReq = "$namespace.battery-data-req"
 const val batteryDataResp = "$namespace.battery-data-resp"
 const val intervalMs = 1_000L
 const val noteChannelId = "$namespace.live.v1"
-const val monitorChannelId = "$namespace.monitor.v1"
 const val noteId = 1
 const val liveNoteId = 5
 const val alarmChannelId = "$namespace.alarms.v1"
@@ -70,11 +69,6 @@ val LocalHapticsEnabled = staticCompositionLocalOf { true }
 class MainActivity : ComponentActivity() {
     enum class Perm { Granted, Denied, NotAsked }
 
-    private val serviceConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {}
-        override fun onServiceDisconnected(name: ComponentName?) {}
-    }
-    private var bound = false
     private var shizukuListenersRegistered = false
 
     private val shizukuBinderReceivedListener = Shizuku.OnBinderReceivedListener {
@@ -120,12 +114,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startStatusService() {
-        val intent = Intent(this, StatusService::class.java)
-        if (getSharedPreferences(settingsName, MODE_PRIVATE).getBoolean("notificationEnabled", true)) {
-            startForegroundService(intent)
-        }
-        if (!bound) {
-            bound = bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        if (!getSharedPreferences(settingsName, MODE_PRIVATE).getBoolean("notificationEnabled", true)) return
+        // Start only when the user opens the app during an active charging session.
+        // Later plug-ins are handled by ChargingPowerReceiver.
+        val batteryState = Battery(this).snapshot()
+        if (batteryState.plugged ?: batteryState.charging) {
+            startForegroundService(Intent(this, StatusService::class.java))
         }
     }
 
@@ -154,10 +148,6 @@ class MainActivity : ComponentActivity() {
             Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
             Shizuku.removeRequestPermissionResultListener(shizukuPermissionResultListener)
             shizukuListenersRegistered = false
-        }
-        if (bound) {
-            unbindService(serviceConnection)
-            bound = false
         }
         super.onDestroy()
     }
@@ -189,6 +179,9 @@ class MainActivity : ComponentActivity() {
         } else {
             syncNotificationEnabled()
             startStatusService()
+            if (checkSelfPermission(permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                registerShizukuListeners()
+            }
         }
 
         setContent {

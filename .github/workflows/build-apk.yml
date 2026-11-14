@@ -1,6 +1,9 @@
 name: Build APK
 
 on:
+  push:
+    branches:
+      - feature/live-charging-power
   pull_request:
     branches:
       - master
@@ -26,11 +29,28 @@ jobs:
           java-version: '17'
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-      - name: Build debug APK
+      - name: Restore stable signing key
+        env:
+          CHARGING_POWER_SIGNING_BUNDLE: ${{ secrets.CHARGING_POWER_SIGNING_BUNDLE }}
+        run: |
+          test -n "$CHARGING_POWER_SIGNING_BUNDLE" || { echo "::error::Add repository secret CHARGING_POWER_SIGNING_BUNDLE"; exit 1; }
+          SIGN_DIR="$RUNNER_TEMP/charging-power-signing"
+          mkdir -p "$SIGN_DIR"
+          printf '%s' "$CHARGING_POWER_SIGNING_BUNDLE" | base64 --decode > "$SIGN_DIR/signing.zip"
+          unzip -q "$SIGN_DIR/signing.zip" -d "$SIGN_DIR"
+          CREDENTIALS="$SIGN_DIR/bgdata-signing/CREDENTIALS.txt"
+          while IFS='=' read -r key value; do
+            case "$key" in
+              KEYSTORE_FILE) echo "KEYSTORE_PATH=$SIGN_DIR/bgdata-signing/$value" >> "$GITHUB_ENV" ;;
+              KEY_ALIAS|KEYSTORE_PASSWORD|KEY_PASSWORD) echo "$key=$value" >> "$GITHUB_ENV" ;;
+            esac
+          done < "$CREDENTIALS"
+          test -f "$SIGN_DIR/bgdata-signing/mobile-background-data-release.jks"
+      - name: Build signed debug APK
         run: ./gradlew --no-daemon :app:assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: charging-power-debug
+          name: charging-power-signed-debug
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error

@@ -73,6 +73,8 @@ class Battery(private val ctx: Context) {
         return v.toLong()
     }
 
+    fun currentAverageRaw(): Long? = prop(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE)
+
     fun snapshot(currentOverride: Long? = null, voltageOverride: Long? = null): BatterySnapshot {
         val batteryIntent = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val levelScale = prop(BatteryManager.EXTRA_SCALE, batteryIntent)?.toDouble()
