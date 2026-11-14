@@ -775,12 +775,11 @@ class StatusService : Service() {
 
     private fun buildNotification(): Notification {
         val powerText = snapshot.watts?.let { fmt(abs(it)) } ?: "—"
-        return Notification.Builder(this, noteChannelId)
-            // Experiment B: deliberately distinctive content to identify which fields
-            // Samsung's Now Bar actually surfaces from the app notification.
-            .setContentTitle("NOW BAR TEST 123")
-            .setContentText("WATT EXPERIMENT B")
-            .setSmallIcon(R.drawable.ico_alarm)
+        val builder = Notification.Builder(this, noteChannelId)
+            .setContentTitle("$powerText W")
+            .setContentText("Charging")
+            // Keep Watt's existing notification icon unchanged; icon experiments come later.
+            .setSmallIcon(R.drawable.ico_lightning)
             .setContentIntent(noteIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -789,7 +788,22 @@ class StatusService : Service() {
             .addExtras(android.os.Bundle().apply {
                 putBoolean("android.requestPromotedOngoing", true)
             })
-            .build()
+
+        if (android.os.Build.VERSION.SDK_INT >= 36) {
+            val progressStyle = Notification.ProgressStyle()
+                .setProgressSegments(listOf(Notification.ProgressStyle.Segment(100)))
+            val level = snapshot.levelPercent?.roundToInt()?.coerceIn(0, 100)
+            if (level != null) {
+                progressStyle.setProgress(level)
+            } else {
+                progressStyle.setProgressIndeterminate(true)
+            }
+            builder.setStyle(progressStyle)
+        } else {
+            // Preserve the previous presentation on Android versions without ProgressStyle.
+            builder.setStyle(Notification.BigTextStyle().bigText("Charging"))
+        }
+        return builder.build()
     }
 
     private fun screenTimeFormatted(): String {
