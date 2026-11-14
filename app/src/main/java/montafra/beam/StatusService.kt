@@ -114,6 +114,7 @@ class StatusService : Service() {
     private val metricOrder = listOf("W", "A", "Ah", "C", "V", "Wh", "%")
     private lateinit var noteIntent: PendingIntent
     private lateinit var noteMgr: NotificationManager
+    private var chargingWakeLock: PowerManager.WakeLock? = null
     private var pluggedInAt: ZonedDateTime? = null
     private lateinit var snapshot: BatterySnapshot
     private val task = PeriodicTask({ update() }, { pollIntervalMs })
@@ -541,6 +542,7 @@ class StatusService : Service() {
     override fun onDestroy() {
         debug("onDestroy()")
         task.stop()
+        chargingWakeLock?.let { if (it.isHeld) it.release() }
         if (initialized) unregisterReceiver(msgReceiver)
         super.onDestroy()
     }
@@ -569,6 +571,25 @@ class StatusService : Service() {
 
         // Hand over an immutable snapshot: the reused bitmap is erased on the next tick.
         return Icon.createWithBitmap(bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: bitmap)
+    }
+
+    private fun syncChargingWakeLock(plugged: Boolean) {
+        val lock = chargingWakeLock ?: run {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "$namespace:ChargingPowerPoll"
+            ).apply {
+                setReferenceCounted(false)
+                chargingWakeLock = this
+            }
+        }
+        if (plugged && !lock.isHeld) {
+            // Keep the CPU awake while cabled so the one-second Live Update continues in Doze.
+            lock.acquire()
+        } else if (!plugged && lock.isHeld) {
+            lock.release()
+        }
     }
 
     private fun buildMonitorNotification(): Notification =
@@ -672,6 +693,7 @@ class StatusService : Service() {
         syncPlugState()
         reconcileScreenTime()
         val plugged = snapshot.plugged ?: snapshot.charging
+        syncChargingWakeLock(plugged)
         if (notificationEnabled && plugged) {
             noteMgr.notify(liveNoteId, buildNotification())
         } else {
