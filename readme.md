@@ -3,7 +3,7 @@
 <h1 align="center">Watt</h1>
 <p align="center"><em>Live charging-power monitor for Android.</em></p>
 
-<p align="center"><a href="https://github.com/vortexnode/beam-live-notification-/releases/latest"><img src="https://img.shields.io/badge/GitHub-Download-181717?logo=github&logoColor=white&style=for-the-badge" alt="Download latest release" /></a></p>
+<p align="center"><a href="https://github.com/vortexnode/Watt/releases/latest"><img src="https://img.shields.io/badge/GitHub-Download-181717?logo=github&logoColor=white&style=for-the-badge" alt="Download latest release" /></a></p>
 
 Watt displays the phone's estimated charging power in a Live Update notification while a charger is connected. The notification is removed and the monitoring session ends when the cable is disconnected.
 
