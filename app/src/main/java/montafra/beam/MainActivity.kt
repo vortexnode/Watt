@@ -100,6 +100,8 @@ class MainActivity : ComponentActivity() {
     private fun registerShizukuListeners() {
         if (shizukuListenersRegistered) return
         shizukuListenersRegistered = true
+        Shizuku.addBinderReceivedListenerSticky(shizukuBinderReceivedListener)
+        Shizuku.addRequestPermissionResultListener(shizukuPermissionResultListener)
     }
 
     private fun getPerm(name: String): Perm {
@@ -168,8 +170,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Shizuku.addBinderReceivedListenerSticky(shizukuBinderReceivedListener)
-        Shizuku.addRequestPermissionResultListener(shizukuPermissionResultListener)
         // The default SystemBarStyle.auto() writes a scrim into navigationBarColor on API 28 and
         // turns isNavigationBarContrastEnforced back on from API 29, overriding what
         // values-v29/themes.xml asks for. A non-auto style keeps both off, so the nav bar stays
