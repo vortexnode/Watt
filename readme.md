@@ -40,6 +40,12 @@ Release builds are signed through the repository's configured CI signing secret.
 
 [Latest Watt release](https://github.com/vortexnode/Watt/releases/latest)
 
+## Acknowledgements
+
+Watt is based on [Beam](https://github.com/montafra/beam), an open-source Android battery monitor by Francesco Montalegni. Beam's original README also acknowledges [Wattz](https://github.com/dubrowgn/wattz), created by Dustin Brown, as an inspiration.
+
+Watt has been adapted and substantially modified into a focused charging-power monitor. It is maintained independently in this repository. The original MIT license and copyright notices are retained in [LICENSE](LICENSE).
+
 ## License
 
-MIT. The upstream Beam project is acknowledged in the source history; Watt's focused charging-power implementation is maintained in this repository.
+MIT. See [LICENSE](LICENSE) for the full license text.
