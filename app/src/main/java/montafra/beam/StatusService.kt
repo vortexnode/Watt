@@ -10,6 +10,11 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
+import android.graphics.Color
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.BatteryManager
@@ -243,10 +248,12 @@ class StatusService : Service() {
 
     private fun buildNotification(): Notification {
         val powerText = snapshot.watts?.let { fmt(abs(it)) } ?: "—"
+        val title = notificationText("$powerText W")
+        val chargingText = notificationText("Charging")
         return Notification.Builder(this, noteChannelId)
-            .setContentTitle("$powerText W")
-            .setContentText("Charging")
-            .setStyle(Notification.BigTextStyle().bigText("Charging"))
+            .setContentTitle(title)
+            .setContentText(chargingText)
+            .setStyle(Notification.BigTextStyle().bigText(chargingText))
             .setSmallIcon(R.drawable.ico_lightning)
             .setContentIntent(notificationIntent)
             .setOngoing(true)
@@ -255,6 +262,27 @@ class StatusService : Service() {
                 putBoolean("android.requestPromotedOngoing", true)
             })
             .build()
+    }
+
+    /**
+     * Keep the system-rendered Live Update layout, but explicitly tint its text for
+     * Samsung's Now Bar/status-bar surfaces where the default foreground can lose contrast.
+     */
+    private fun notificationText(text: String): CharSequence {
+        val nightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        val color = if (nightMode == Configuration.UI_MODE_NIGHT_YES) {
+            Color.WHITE
+        } else {
+            Color.BLACK
+        }
+        return SpannableString(text).apply {
+            setSpan(
+                ForegroundColorSpan(color),
+                0,
+                length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
     }
 
     private fun syncChargingWakeLock() {
