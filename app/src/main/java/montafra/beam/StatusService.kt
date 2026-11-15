@@ -252,7 +252,6 @@ class StatusService : Service() {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .addExtras(android.os.Bundle().apply {
-                putBoolean("android.requestPromotedOngoing", true)
 
                 // Samsung One UI uses this extra to render an opaque Now Bar chip.
                 // Keep the foreground text styling under Samsung's control.
