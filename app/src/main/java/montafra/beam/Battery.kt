@@ -1,97 +1,55 @@
 package montafra.beam
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 
-enum class PlugType {
-    Ac,
-    Dock,
-    Unknown,
-    Usb,
-    Wireless;
-
-    companion object {
-        fun fromRaw(plugType: Int?): PlugType? {
-            return when (plugType) {
-                null, 0 -> null
-                BatteryManager.BATTERY_PLUGGED_AC -> Ac
-                BatteryManager.BATTERY_PLUGGED_DOCK -> Dock
-                BatteryManager.BATTERY_PLUGGED_USB -> Usb
-                BatteryManager.BATTERY_PLUGGED_WIRELESS -> Wireless
-                else -> Unknown
-            }
-        }
-    }
-}
-
 enum class ChargeStatus {
-    Charging,
-    Discharging,
-    Full,
-    NotCharging,
-    Unknown;
+    Charging, Discharging, Full, NotCharging, Unknown;
 
     companion object {
-        fun fromRaw(status: Int?): ChargeStatus {
-            return when (status) {
-                BatteryManager.BATTERY_STATUS_CHARGING -> Charging
-                BatteryManager.BATTERY_STATUS_DISCHARGING -> Discharging
-                BatteryManager.BATTERY_STATUS_FULL -> Full
-                BatteryManager.BATTERY_STATUS_NOT_CHARGING -> NotCharging
-                else -> Unknown
-            }
+        fun fromRaw(status: Int?): ChargeStatus = when (status) {
+            BatteryManager.BATTERY_STATUS_CHARGING -> Charging
+            BatteryManager.BATTERY_STATUS_DISCHARGING -> Discharging
+            BatteryManager.BATTERY_STATUS_FULL -> Full
+            BatteryManager.BATTERY_STATUS_NOT_CHARGING -> NotCharging
+            else -> Unknown
         }
     }
 }
 
-class Battery(private val ctx: Context) {
-    private val mgr = ctx.getSystemService(Activity.BATTERY_SERVICE) as BatteryManager
-
-    // configuration
+class Battery(private val context: Context) {
+    private val manager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
     var currentScalar = 1.0
     var invertCurrent = false
 
-    private fun prop(id: Int): Long? {
-        val v = mgr.getLongProperty(id)
-        if (v == Long.MIN_VALUE)
-            return null
+    private fun property(id: Int): Long? =
+        manager.getLongProperty(id).takeUnless { it == Long.MIN_VALUE }
 
-        return v
+    private fun batteryExtra(intent: Intent?, key: String): Long? {
+        if (intent?.hasExtra(key) != true) return null
+        return intent.getIntExtra(key, Int.MIN_VALUE)
+            .takeUnless { it == Int.MIN_VALUE }
+            ?.toLong()
     }
 
-    private fun prop(id: String, intent: Intent?): Long? {
-        if (intent?.hasExtra(id) != true)
-            return null
-
-        val v = intent.getIntExtra(id, Int.MIN_VALUE)
-        if (v == Int.MIN_VALUE)
-            return null
-
-        return v.toLong()
-    }
-
-    fun currentAverageRaw(): Long? = prop(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE)
-
-    fun snapshot(currentOverride: Long? = null, voltageOverride: Long? = null, currentScalarOverride: Double? = null): BatterySnapshot {
-        val batteryIntent = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val levelScale = prop(BatteryManager.EXTRA_SCALE, batteryIntent)?.toDouble()
-        val level = prop(BatteryManager.EXTRA_LEVEL, batteryIntent)?.toDouble()
-
+    fun snapshot(
+        currentOverride: Long? = null,
+        voltageOverride: Long? = null,
+        currentScalarOverride: Double? = null,
+    ): BatterySnapshot {
+        val batteryIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         return BatterySnapshot(
-            chargeTimeRemainingRaw = mgr.computeChargeTimeRemaining(),
-            currentRaw = currentOverride ?: prop(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW),
-            chargeStatus = ChargeStatus.fromRaw(prop(BatteryManager.EXTRA_STATUS, batteryIntent)?.toInt()),
+            currentRaw = currentOverride ?: property(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW),
             currentScalar = currentScalarOverride ?: currentScalar,
-            energyRaw = prop(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER),
-            level = level.div(levelScale),
             invertCurrent = invertCurrent,
-            isChargingRaw = mgr.isCharging,
-            pluggedRaw = prop(BatteryManager.EXTRA_PLUGGED, batteryIntent),
-            tempRaw = prop(BatteryManager.EXTRA_TEMPERATURE, batteryIntent),
-            voltsRaw = voltageOverride ?: prop(BatteryManager.EXTRA_VOLTAGE, batteryIntent),
+            chargeStatus = ChargeStatus.fromRaw(
+                batteryExtra(batteryIntent, BatteryManager.EXTRA_STATUS)?.toInt()
+            ),
+            isChargingRaw = manager.isCharging,
+            pluggedRaw = batteryExtra(batteryIntent, BatteryManager.EXTRA_PLUGGED),
+            voltsRaw = voltageOverride ?: batteryExtra(batteryIntent, BatteryManager.EXTRA_VOLTAGE),
         )
     }
 }
