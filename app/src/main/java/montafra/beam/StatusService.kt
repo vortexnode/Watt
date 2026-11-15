@@ -257,7 +257,7 @@ class StatusService : Service() {
                 // Samsung One UI uses this extra to render an opaque Now Bar chip.
                 // Keep the foreground text styling under Samsung's control.
                 putInt("android.ongoingActivityNoti.style", 1)
-                putInt("android.ongoingActivityNoti.chipBgColor", 0xFF888888.toInt())
+                putInt("android.ongoingActivityNoti.chipBgColor", 0xFF999999.toInt())
             })
             .build()
     }
