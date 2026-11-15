@@ -32,8 +32,8 @@ configure<ApplicationExtension> {
         applicationId = "com.vortexnode.chargingpower"
         minSdk = 28
         targetSdk = 36
-        versionCode = 55
-        versionName = "1.0.15"
+        versionCode = 56
+        versionName = "1.0.16"
     }
 
     androidResources {
